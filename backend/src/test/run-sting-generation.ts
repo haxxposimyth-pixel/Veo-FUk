@@ -12,17 +12,18 @@ async function test() {
 
   // 1. Reconfigure settings and keys in DB
   console.log('Reconfiguring settings in DB...');
+  const activeKey = process.env.GEMINI_API_KEY || 'DUMMY_KEY';
   SettingsRepository.saveSettings({
     model: 'gemini-2.5-pro',
-    geminiApiKey: 'AIzaSyAcpBL1ICu9X5f2OcHlLWnEPkdgPRw5u_8',
-    geminiApiKeys: ['AIzaSyAcpBL1ICu9X5f2OcHlLWnEPkdgPRw5u_8']
+    geminiApiKey: activeKey,
+    geminiApiKeys: [activeKey]
   });
 
   db.prepare("DELETE FROM gemini_keys").run();
   db.prepare(`
     INSERT INTO gemini_keys (id, key_value, label, is_active, status, added_at)
     VALUES (?, ?, ?, 1, 'active', ?)
-  `).run(crypto.randomUUID(), 'AIzaSyAcpBL1ICu9X5f2OcHlLWnEPkdgPRw5u_8', 'Sting Test Key', Date.now());
+  `).run(crypto.randomUUID(), activeKey, 'Sting Test Key', Date.now());
 
   db.prepare("DELETE FROM key_model_quota").run();
 
