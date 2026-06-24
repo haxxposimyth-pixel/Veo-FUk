@@ -1,0 +1,92 @@
+================================================================
+VERTEX AI AUTHENTICATION & CONFIGURATION DIAGNOSTICS
+Timestamp: 2026-06-14T15:51:35.091Z
+================================================================
+
+--- STEP 1: VERIFY PACKAGE INSTALLATION ---
+STEP 1 PASS — @google-cloud/vertexai v1.12.0 is installed
+STEP 1 CHECK — @google/generative-ai fallback package present. Good.
+
+--- STEP 2: CHECK GOOGLE APPLICATION DEFAULT CREDENTIALS (ADC) ---
+STEP 2 FAIL — Google ADC is not configured.
+FIX — Run this command in your terminal and sign in with your Google account:
+  gcloud auth application-default login
+After signing in, re-run this script.
+
+--- STEP 3: DETECT GCP PROJECT ID ---
+STEP 3 FAIL — No GCP projects found. Cannot auto-detect project ID.
+FIX — Make sure you are signed in to the correct Google account:
+  gcloud auth login
+  gcloud projects list
+Then re-run this script.
+
+--- STEP 4: CHECK IF VERTEX AI API IS ENABLED ---
+STEP 4 SKIP — No project ID detected in Step 3.
+
+--- STEP 5: CHECK CURRENT DATABASE SETTINGS ---
+STEP 5 INFO — gcp_project_id not yet in database. Will be written in Step 6.
+STEP 5 INFO — gcp_location not in database. Will default to us-central1 in Step 6.
+
+--- STEP 6: WRITE GCP SETTINGS INTO THE DATABASE ---
+STEP 6 SKIP — Cannot write gcp_project_id because no project ID was detected in Step 3.
+FIX — Complete Step 3 fix first, then re-run this script.
+
+--- STEP 7: SEND A TEST REQUEST TO VERTEX AI ---
+STEP 7 SKIP — Skipped because authentication, project detection, or API verification failed.
+
+--- STEP 8: CHECK IF THE VVS STUDIO BACKEND SERVER IS RUNNING ---
+STEP 8 SKIP — VVS Studio backend is not running.
+INFO — Start the server with: npm run dev
+INFO — Then look for this line in the backend logs within 5 seconds of startup:
+  [GeminiService] Vertex AI initialized. Project: YOUR_PROJECT, Location: us-central1
+  If you see that line, Vertex AI is active.
+
+--- STEP 9: CHECK RECENT AGENT LOGS ---
+agent_logs row: agent=[Continuity Agent] model=[gemini-3.1-pro-preview] status=[success]
+agent_logs row: agent=[VeoAgent_Validation] model=[gemini-3.1-pro-preview] status=[failed]
+  error=[Narration word count (8) is out of budget (10-19 words) in Prompt 1 for duration 8s.]
+agent_logs row: agent=[VeoAgent_Diversity_Warning] model=[gemini-3.1-pro-preview] status=[failed]
+  error=[Shot diversity violation persisted after repair at Phase 1 Scene 7: shot_type 'medium' and camera 'Static Camera.' still repeated. Accepting state to ]
+agent_logs row: agent=[VeoAgent_AppearanceValidator] model=[gemini-3.1-pro-preview] status=[success]
+agent_logs row: agent=[VeoAgent_AppearanceValidator] model=[gemini-3.1-pro-preview] status=[success]
+agent_logs row: agent=[VeoAgent_Validation] model=[gemini-3.1-pro-preview] status=[failed]
+  error=[Narration word count (7) is out of budget (10-19 words) in Prompt 1 for duration 8s.]
+agent_logs row: agent=[VeoAgent_Gate] model=[gemini-3.1-pro-preview] status=[failed]
+  error=[Completeness validation failed: Truncated: shot: String must contain at least 1 character(s)]
+agent_logs row: agent=[VeoAgent_Validation] model=[gemini-3.1-pro-preview] status=[failed]
+  error=[Shot field missing or empty.]
+agent_logs row: agent=[VeoAgent_AppearanceValidator] model=[gemini-3.1-pro-preview] status=[success]
+agent_logs row: agent=[VeoAgent_AppearanceValidator] model=[gemini-3.1-pro-preview] status=[success]
+STEP 9 PASS — Recent generations used Vertex AI versioned model names. Vertex AI is active.
+
+================================================================
+VERTEX AI SETUP SUMMARY
+Generated: 6/14/2026, 9:21:35 PM
+================================================================
+
+Detected GCP Project ID : NOT FOUND
+GCP Location            : us-central1
+ADC Configured          : NO
+Vertex AI API Enabled   : NO
+Package Installed       : YES
+Database Updated        : NO
+Vertex AI Test Response : SKIPPED
+Backend Server Running  : NO
+agent_logs Mode         : VERTEX AI
+
+OVERALL STATUS: ACTION REQUIRED — See FAILED steps above.
+
+Fix each FAIL item above in order, then re-run this script.
+
+================================================================
+NEXT STEPS FOR VVS STUDIO
+================================================================
+1. Restart backend: npm run dev
+2. Watch for: [GeminiService] Vertex AI initialized. Project: YOUR_PROJECT
+3. Open VVS Studio at http://localhost:5173
+4. Open an existing project with scenes
+5. Trigger Veo prompt generation for one phase
+6. Confirm NO PROHIBITED_CONTENT errors in backend terminal
+7. Run this script again after generation to verify agent_logs show
+   versioned model names confirming Vertex AI is active
+================================================================

@@ -1,0 +1,109 @@
+[PhasePlan Sanity] Parity check passed successfully: 8-min yields exactly 10 phases, climax=9, outro=10, plant=2, spike=8.
+=== HINDI GENERATION END-TO-END TEST ===
+
+Running database migrations...
+Migration not found, skipping: 001_initial.sql
+Migration not found, skipping: 002_agent_logs.sql
+Migration not found, skipping: 004_custom_styles.sql
+Migration not found, skipping: 005_continuity_warnings.sql
+Migration not found, skipping: 006_fix_continuity_warnings.sql
+Migration not found, skipping: 008_story_planning.sql
+Migration not found, skipping: 009_veo_prompts_index.sql
+Migration not found, skipping: 013_gemini_key_pool.sql
+  ✓ 014_story_analyses
+  ✓ 017_video_metadata
+  ✓ 024_credibility_reviews
+Migrations complete.
+Created test project: "Test Hindi Project" (Narration Language: Hindi)
+
+--- Running Production Bible Generation ---
+Production Bible Generated successfully.
+
+--- (a) SAMPLE CHARACTER ROSTER ENTRY (Strictly English) ---
+{
+  "id": "CHAR_001",
+  "name": "Arjun",
+  "role": "Archaeologist",
+  "physical_description": "A tall man in his late 30s with sun-bronzed skin and dark hair.",
+  "costume_description": "Khaki safari shirt, brown leather boots, rugged trousers.",
+  "voice_tone": "confident and warm",
+  "significance": "major",
+  "is_narrator": false,
+  "dna": {
+    "facial_features": "sharp jawline, dark brown eyes, slight stubble",
+    "clothing": "Khaki safari vest and dark pants",
+    "age": "38",
+    "hairstyle": "short, messy dark hair",
+    "body_type": "athletic, tall stature",
+    "consistency_notes": "Always wears the archaeologist leather strap"
+  },
+  "appearance_lock": {
+    "character_type": "human",
+    "physical_description": "A tall man in his late 30s with sun-bronzed skin and dark hair.",
+    "style_notes": "Photorealistic live-action cinematic look, natural shadows.",
+    "ethnicity": "South Asian",
+    "approximate_age": "38",
+    "gender": "male",
+    "skin_tone": "sun-bronzed",
+    "hair": "messy short dark hair",
+    "eyes": "dark brown",
+    "face_structure": "sharp and defined",
+    "distinguishing_features": "slight stubble",
+    "primary_clothing": "Khaki safari shirt and pants",
+    "clothing_colors": [
+      "khaki",
+      "brown"
+    ],
+    "clothing_era": "modern",
+    "accessories": "leather wristband",
+    "forbidden_appearance_changes": [
+      "Do not change vest color",
+      "Do not add glasses"
+    ]
+  }
+}
+
+--- (b) COMPILED LIGHTING KELVIN FIELD (Strictly English Words + Kelvin) ---
+color_temperature_kelvin: "four-thousand-five-hundred Kelvin"
+ambient_palette: ["#C8A2C8","#FFF8DC"]
+sun_position: "low angle sun casting long shadows"
+
+--- (c) COMPILED VEO PROMPTS & VALIDATIONS ---
+[33mwarn[39m: Prompt validation issues for scene 1: Visual has 99 words (must be 40-80 words) {"timestamp":"2026-06-19T21:27:50.879Z"}
+--- PROMPT 1: Scene 1 (B-roll, Narration in Hindi, Visuals in English) ---
+Prompt 1:
+Visual: Subject lock: Arjun is a thirty-eight South Asian male (skin: sun-bronzed, hair: messy short dark hair, eyes: dark brown, face: sharp and defined, wearing leather wristband, wearing Khaki safari shirt and pants in khaki, brown from modern era). Arjun carefully picks up the circular gold amulet from the dusty stone altar. Prop lock: Golden Amulet visual style: Circular gold coin-like amulet, detailed star pattern in the center, dusty aged brass finish.. No characters speak. All characters' mouths remain closed and neutral; no lip movement, no talking. No spoken dialogue or voiceover in the audio — ambient and SFX only.
+Shot: close_up — extreme close up of hands
+Lens: 50mm macro anamorphic prime.
+Lighting: four-thousand-five-hundred Kelvin light from low angle sun casting long shadows, casting soft-edged dark shadows. Mood: evocative and golden. Ambient palette: #C8A2C8, #FFF8DC. Look: photorealistic live-action cinematic using Kodak Vision3 5219 on Panavision Anamorphic Primes.
+Camera: static.
+Duration: 8s
+Ambient Sound: mysterious temple hum.
+SFX: stone grinding sound.
+Avoid: watermark, cartoon, modern technology, subtitles, on-screen text, logo, deformed hands, extra limbs, morphing faces, extra fingers.
+Connection: cut.
+Voiceover (post-production overlay — DO NOT vocalize or lip-sync; generate silence): इस प्राचीन गुफा के भीतर, एक गहरा रहस्य छुपा हुआ है।.
+
+--- PROMPT 2: Scene 2 (Narrator speaking on camera, dialogue in Hindi, Visuals in English) ---
+Prompt 1:
+Visual: Subject lock: The Narrator is a forty Asian female (skin: light brown, hair: neat black hair, eyes: black, face: oval, wearing silver necklace, wearing Black coat in black, grey from modern era). The Narrator stands in the middle of the temple, looking directly into the camera lens with a mysterious smile. Only the speaking character's mouth moves to lip-sync their dialogue line. All other characters remain silent with closed mouths.
+Shot: medium — medium shot
+Lens: 35mm prime lens.
+Lighting: four-thousand-five-hundred Kelvin light from low angle sun casting long shadows, casting soft-edged dark shadows. Mood: evocative and golden. Ambient palette: #C8A2C8, #FFF8DC. Look: photorealistic live-action cinematic using Kodak Vision3 5219 on Panavision Anamorphic Primes.
+Camera: slow push in.
+Duration: 8s
+Ambient Sound: soft echo in temple.
+SFX: None.
+Avoid: watermark, blur, low quality, subtitles, on-screen text, logo, deformed hands, extra limbs, morphing faces, extra fingers..
+Connection: fade.
+Narration: क्या आप इस प्राचीन सत्य को जानने के लिए तैयार हैं?
+Dialogue: क्या आप तैयार हैं?
+
+--- Testing Validation Guard on Valid Prompt ---
+✅ Valid Prompt passed successfully.
+
+--- Testing Validation Guard on Regressed Prompt (Devanagari in visual field) ---
+✅ Regressed prompt successfully blocked with warnings:
+   - "Prompt validation issues for scene 1: Visual has 9 words (must be 40-80 words) | Field visual must be English — contains non-Latin script"
+
+=== TEST RUN COMPLETED ===

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+*.db
+*.sqlite
+data/
+.DS_Store
+frontend/dist/
+backend/dist/
+backend/data/
+5ApiKeys
+.vs/
+scratch/
+test_sys.txt

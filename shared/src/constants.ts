@@ -1,0 +1,12 @@
+export const SCENE_DURATION_SECONDS = 8;
+export const NARRATION_WORDS_PER_SECOND = 2.5;
+export const NARRATION_WORDS_PER_SCENE = Math.round(
+  SCENE_DURATION_SECONDS * NARRATION_WORDS_PER_SECOND
+); // = 20 words
+export const MIN_NARRATION_WORDS_PER_SCENE = 10;
+
+
+export const GEMINI_BACKOFF_BASE_MS = 5000;
+export const GEMINI_BACKOFF_MAX_RETRIES = 4;
+
+export const MAX_PHASE_COUNT = 30;
