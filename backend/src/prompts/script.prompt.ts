@@ -108,6 +108,8 @@ RULES (non-negotiable):
    
    Only phase_content uses names. The structured JSON fields (character_ids_active, location_id_primary) must still use the ID format.
 
+   COUPLING RULE: when a phase's narration names a LIST or MONTAGE of distinct concrete subjects (e.g. "coffee, phone, shoes"), phase_content MUST include an explicit visual beat for EACH named subject in the sequence. Narration and visual direction must stay coupled — the visuals must depict the concrete nouns the narration mentions, not just the overall topic.
+
 3. narration_text is the dedicated raw voiceover narration block. Write it in ${narrationLanguage} (see the LANGUAGE NON-NEGOTIABLE block above). Make it vivid, punchy, and optimised for short-form video.
 
 4. viral_hook_rating (1–10): Honestly self-score the engagement quality.
@@ -389,6 +391,7 @@ Instead: deliver one final reframe that makes everything they just watched feel 
 
   prompt += `\n\nRules:
 - Write narration_text in ${narrationLanguage}; write phase_title, phase_content, key_events, key_facts, key_images in ENGLISH.
+- COUPLING RULE: when a phase's narration names a LIST or MONTAGE of distinct concrete subjects (e.g. "coffee, phone, shoes"), phase_content MUST include an explicit visual beat for EACH named subject in the sequence. Narration and visual direction must stay coupled — the visuals must depict the concrete nouns the narration mentions, not just the overall topic.
 - Match the narrative tone of the adjacent phases perfectly
 - DO NOT contradict any character details, locations, or props established in the Production Bible
 - Stay true to the Production Bible's tone and world
@@ -821,6 +824,7 @@ INSTRUCTIONS:
 2. phase_content: Write a detailed description of what happens visually in this phase.
    - Use character NAMES, location NAMES, and object NAMES (not IDs) in phase_content.
    - It must be a vivid narrative beat in ENGLISH, minimum 10 characters.
+   - COUPLING RULE: when the narration text names a list or montage of distinct concrete subjects (e.g., "coffee, phone, shoes"), phase_content MUST include an explicit, detailed visual action or beat for EACH named subject in the sequence. Visuals must depict the concrete nouns the narration mentions, not just the overall topic.
 3. character_ids_active: List of character IDs (e.g., "CHAR_001") present or active in this phase.
    - They MUST exist in the Production Bible roster.
 4. location_id_primary: The primary location ID (e.g., "LOC_001") for this phase.

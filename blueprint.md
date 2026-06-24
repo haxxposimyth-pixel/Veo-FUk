@@ -240,6 +240,7 @@ Once setup is complete, the user triggers the sequential execution of **speciali
 - **Bible Context Optimization**: Serializes the `character_roster`, `location_roster`, and `visual_style_lock` once into a single context block before starting the phase loop, replacing bible object serialization within the loop prompts.
 - **Overlapping Transcript Segmentation**: Rather than passing the full YouTube transcript to all phases, splits the transcript into 10 overlapping segments based on word count. Injects only the corresponding segment `transcriptSegments[i - 1]` to reduce token overhead.
 - **Merged Schema Content Extraction**: Removes the separate `ScriptAgent_ContentExtractor` LLM call from the loop by merging target extraction fields (`key_facts`, `key_images`, `key_events`, and `characters_mentioned`) directly into the main Zod schema (`optimizedScriptPhaseItemSchema`) for single-pass extraction.
+- **Coupled Narration & Visuals**: When a phase's narration names a list or montage of distinct concrete subjects (e.g. "coffee, phone, shoes"), the script agent MUST couple them by writing a visual blueprint (`phase_content`) that contains an explicit visual beat for each named subject.
 - **Rewrite with Suggestions**:
   - Implements `rewriteHookWithSuggestions` using suggestions, production bible constraints, script tone parameters, and Phase 2 continuity to compile an automatically improved Phase 1 hook script.
 
@@ -267,6 +268,9 @@ Once setup is complete, the user triggers the sequential execution of **speciali
   - Runs fuzzy Levenshtein distance $\le 2$ matching against Production Bible character roster. Typo matches are normalized to the canonical name. If no match is found, re-prompts the model once with instructions. If it fails again, the scene is marked as `"needs_review"` and a `continuity_warnings` row (cross_phase = 0) is created.
   - **Strict Object Registry Enforcement**: Cross-checks all strings in `key_visible_objects` and `key_objects_visible` against registry names and `object_id` entries using case-insensitive substring matching. If matched, it normalizes them to their official registry names. Unmatched objects are silently pruned from the snapshot and logged to `agent_logs` (agent name `'SceneAgent_ObjectValidator'`, output `'unmatched'`), and a removal notice is appended to `continuity_notes` (avoiding false database warnings).
   - Runs a chronological time-of-day progression check (e.g. night -> morning with no phase boundary), warning on regression.
+  - **Montage Expansion & Splitter Preservation**:
+    - Strengthened Montage Expansion (Rule 8) mandates the LLM to emit a separate scene object for each subject in its own output before post-processing when the narration/phase_content names multiple distinct subjects.
+    - If the LLM already returns multiple distinct scene blocks (i.e. `result.scenes.length > 1`), the splitting logic preserves and uses them directly rather than overriding them with programmatically cloned-base scenes and generic b-roll camera angle suffixes.
 
 ### Agent 4: Veo Prompt Agent
 - **File Reference**: [veo-agent.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts)

@@ -79,6 +79,27 @@ function getLevenshteinDistance(a: string, b: string): number {
   return tmp[a.length][b.length];
 }
 
+function stripNarrationMeta(desc: string): string {
+  if (!desc) return '';
+  let cleaned = desc;
+  
+  // Remove starting/middle references
+  cleaned = cleaned.replace(/\b(?:the\s+)?(?:narration|voiceover|narrator|audio|vo)\s+(?:emphasizes|mentions|says|explains|highlights|describes|states|indicates|tells\s+us|points\s+out|details)\s+(?:that|how|why|about)?\s*/gi, '');
+  cleaned = cleaned.replace(/\b(?:as\s+)?(?:the\s+)?(?:narration|voiceover|narrator|audio|vo)\s+(?:describes|says|states|mentions|explains|highlights)\b\s*/gi, '');
+  cleaned = cleaned.replace(/\b(?:showing|illustrating|depicting|representing)\s+(?:what\s+)?(?:the\s+)?(?:narration|voiceover|narrator|audio|vo)\s+(?:says|states|describes|mentions|refers\s+to)\b\s*/gi, '');
+  cleaned = cleaned.replace(/\b(?:illustrating|showing|depicting|representing)\s+the\s+(?:narration|voiceover|narrator|audio|vo)\b/gi, '');
+  
+  // Clean up punctuation debris (e.g. "foo, ." or "foo,")
+  cleaned = cleaned.replace(/,\s*\./g, '.');
+  cleaned = cleaned.replace(/,\s*$/g, '');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  return cleaned;
+}
+
 // === VVS OPT FIX-2 MATCHING START ===
 function resolveCharacterName(
   rawName: string,
@@ -245,7 +266,9 @@ export class SceneAgent extends BaseAgent {
 
     for (const scene of scenes) {
       scene.title = scene.title ?? '';
-      scene.scene_description = scene.scene_description ?? '';
+      let desc = stripNarrationMeta(scene.scene_description ?? '');
+      desc = desc.replace(/\s*\((?:OBJ|LOC|CHAR)_\d+\)/g, '').replace(/\s+/g, ' ').trim();
+      scene.scene_description = desc;
       scene.continuity_notes = scene.continuity_notes ?? '';
       scene.narration_fragment = scene.narration_fragment ?? '';
       const snapshot = scene.visual_state_snapshot;
@@ -622,9 +645,12 @@ Your scene description must be visually continuous from this state. If your scen
     const injection = `Voiceover narration for this phase (${wordCount} words):
 ${narrationSource}
 
-Distribute this narration evenly. Each scene gets exactly 
-~20 words of narration_fragment from this text. 
-Do not invent new narration — only use the text above.`;
+IMPORTANT NARRATION DISTRIBUTION RULES:
+1. Do not invent new narration — only use the text above.
+2. For lists, montages, hooks, and climaxes, expand the narration into MULTIPLE scenes.
+3. Put the narration fragment ONLY on the lead scene(s).
+4. All subsequent b-roll scenes in the list/montage MUST have narration_fragment set to an empty string "". Do not repeat narration.
+5. Lead scenes with narration should target ~15-20 words, but silent b-roll scenes get exactly "".`;
 
     let finalResult: SceneBreakdownData | null = null;
     let splitScenes: any[] = [];
@@ -690,77 +716,100 @@ Do not invent new narration — only use the text above.`;
           "A tracking shot panning slowly across the surface, revealing additional details."
         ];
 
-        for (const scene of result.scenes) {
-          const baseWordCount = getWordCount(scene.narration_fragment || '', narrationLanguage);
-          const sentenceCount = getSentenceParts(scene.narration_fragment || '', narrationLanguage).length;
-          const minClips = (rules.wordCountStrategy === 'char' && baseWordCount > 0) ? 2 : 1;
-
-          // Estimate spoken seconds using word count and speaking rate, then pacing-adjust
-          const baselineClipCount = getDurationAwareClipCount(
-            baseWordCount,
-            narrationLanguage,
-            finalPacingFactor,
-            TARGET_CLIP_LENGTH_SECONDS
-          );
-
-          const floors = Math.max(minClips, sentenceCount);
-          const requestedClipCount = Math.min(
-            MAX_CLIPS_PER_SCENE_LIMIT,
-            Math.max(floors, Math.ceil(baselineClipCount))
-          );
-
-          const fragments = splitNarrationIntoFragments(scene.narration_fragment || '', requestedClipCount, narrationLanguage);
-          
-          // Pad the fragments with empty strings if requestedClipCount exceeds actualClipCount
-          while (fragments.length < requestedClipCount) {
-            fragments.push('');
-          }
-
-          const actualClipCount = fragments.length;
-          if (actualClipCount > 1) {
-            let prevCamera = (scene as any).camera || 'static';
-            let prevShotType = (scene as any).shot_type || 'medium';
-            const shotTypes = ['establishing', 'wide', 'medium', 'close_up', 'extreme_close_up'];
-            for (let i = 0; i < actualClipCount; i++) {
-              const clonedScene = JSON.parse(JSON.stringify(scene));
-              clonedScene.narration_fragment = fragments[i] ?? '';
-              
-              // TITLE part suffix
-              clonedScene.title = `${scene.title} (Part ${i + 1})`;
-              
-              // CAMERA progression
-              let cam = prevCamera;
-              if (i > 0) {
-                const cleanPrevCam = prevCamera.replace(/\s*\(Angle\s+[A-Za-z]\)\s*/gi, '').trim();
-                cam = getNextCamera(cleanPrevCam);
-              }
-              clonedScene.camera = cam;
-              prevCamera = cam;
-
-              // SHOT TYPE rotation
-              let st = clonedScene.shot_type || 'medium';
-              if (i > 0 && st === prevShotType) {
-                const idx = shotTypes.indexOf(st);
-                const nextIdx = (idx !== -1 ? idx + 1 : 0) % shotTypes.length;
-                st = shotTypes[nextIdx];
-              }
-              clonedScene.shot_type = st;
-              prevShotType = st;
-
-              // VISUAL / scene_description continuation (ensure unique description per part)
-              if (i > 0) {
-                clonedScene.scene_description = `${scene.scene_description} ${bRollVisuals[i % bRollVisuals.length]}`;
-              }
-
-              // visual_state_snapshot only on the last fragment
-              if (i < actualClipCount - 1) {
-                clonedScene.visual_state_snapshot = null;
-              }
-
-              tempSplitScenes.push(clonedScene);
-            }
+        const nonEvCount = result.scenes.filter((s: any) => (s.narration_fragment || '').trim().length > 0).length;
+        if (result.scenes.length > 1) {
+          if (nonEvCount > 1) {
+            // The LLM has already returned multiple distinct scene blocks and distributed the narration.
+            // Use them directly without any splitting or suffix overriding.
+            tempSplitScenes.push(...result.scenes);
           } else {
-            tempSplitScenes.push(scene);
+            // The LLM returned multiple distinct scene blocks but left subsequent ones empty (Rule 8).
+            // Split the narration text of the phase into result.scenes.length fragments and distribute them.
+            const fragments = splitNarrationIntoFragments(narrationSource, result.scenes.length, narrationLanguage);
+            while (fragments.length < result.scenes.length) {
+              fragments.push('');
+            }
+            for (let i = 0; i < result.scenes.length; i++) {
+              const scene = result.scenes[i];
+              scene.narration_fragment = fragments[i];
+              tempSplitScenes.push(scene);
+            }
+          }
+        } else {
+          let bRollFallbackIndex = 0;
+          for (const scene of result.scenes) {
+            const baseWordCount = getWordCount(scene.narration_fragment || '', narrationLanguage);
+            const sentenceCount = getSentenceParts(scene.narration_fragment || '', narrationLanguage).length;
+            const minClips = (rules.wordCountStrategy === 'char' && baseWordCount > 0) ? 2 : 1;
+
+            // Estimate spoken seconds using word count and speaking rate, then pacing-adjust
+            const baselineClipCount = getDurationAwareClipCount(
+              baseWordCount,
+              narrationLanguage,
+              finalPacingFactor,
+              TARGET_CLIP_LENGTH_SECONDS
+            );
+
+            const floors = Math.max(minClips, sentenceCount);
+            const requestedClipCount = Math.min(
+              MAX_CLIPS_PER_SCENE_LIMIT,
+              Math.max(floors, Math.ceil(baselineClipCount))
+            );
+
+            const fragments = splitNarrationIntoFragments(scene.narration_fragment || '', requestedClipCount, narrationLanguage);
+            
+            // Pad the fragments with empty strings if requestedClipCount exceeds actualClipCount
+            while (fragments.length < requestedClipCount) {
+              fragments.push('');
+            }
+
+            const actualClipCount = fragments.length;
+            if (actualClipCount > 1) {
+              let prevCamera = (scene as any).camera || 'static';
+              let prevShotType = (scene as any).shot_type || 'medium';
+              const shotTypes = ['establishing', 'wide', 'medium', 'close_up', 'extreme_close_up'];
+              for (let i = 0; i < actualClipCount; i++) {
+                const clonedScene = JSON.parse(JSON.stringify(scene));
+                clonedScene.narration_fragment = fragments[i] ?? '';
+                
+                // TITLE part suffix
+                clonedScene.title = `${scene.title} (Part ${i + 1})`;
+                
+                // CAMERA progression
+                let cam = prevCamera;
+                if (i > 0) {
+                  const cleanPrevCam = prevCamera.replace(/\s*\(Angle\s+[A-Za-z]\)\s*/gi, '').trim();
+                  cam = getNextCamera(cleanPrevCam);
+                }
+                clonedScene.camera = cam;
+                prevCamera = cam;
+
+                // SHOT TYPE rotation
+                let st = clonedScene.shot_type || 'medium';
+                if (i > 0 && st === prevShotType) {
+                  const idx = shotTypes.indexOf(st);
+                  const nextIdx = (idx !== -1 ? idx + 1 : 0) % shotTypes.length;
+                  st = shotTypes[nextIdx];
+                }
+                clonedScene.shot_type = st;
+                prevShotType = st;
+
+                // VISUAL / scene_description continuation (ensure unique description per part)
+                if (i > 0) {
+                  clonedScene.scene_description = `${scene.scene_description} ${bRollVisuals[bRollFallbackIndex % bRollVisuals.length]}`;
+                  bRollFallbackIndex++;
+                }
+
+                // visual_state_snapshot only on the last fragment
+                if (i < actualClipCount - 1) {
+                  clonedScene.visual_state_snapshot = null;
+                }
+
+                tempSplitScenes.push(clonedScene);
+              }
+            } else {
+              tempSplitScenes.push(scene);
+            }
           }
         }
 
