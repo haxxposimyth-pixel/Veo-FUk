@@ -104,6 +104,8 @@ VISUAL field:
 - Always reflect the project topic and apply visual_style.
 - All veo_style_tokens must appear naturally in the visual description.
 - Numbers: write ALL numbers as words (e.g. "thirty-five" not "35").
+- Forbid vague/invisible descriptors: do NOT use "imperceptibly", "subtly", "seamless", "complex", "profound", or "dynamic data". You must describe concrete visible changes (e.g. "fuel surface visibly lowers", "waterline reveals a band of hull paint", "gauge needle vibrates", "blue bars rise/fall").
+- For screens, consoles, and interfaces, ensure there is no text or numbers; use abstract/symbolic graphics only — no readable UI labels. Do not describe text as "blurred" or "unreadable" — specify that there is no text or numbers, only abstract shapes and symbols.
 
 LENS field:
 - EXACTLY ONE consolidated lens/camera descriptor per prompt. Do not scatter conflicting lens or camera model information across the Visual, Lens, and Look fields. If the Lens field specifies a lens (e.g., "35mm prime lens"), make sure the Visual and Look fields do not specify different lenses or contradictory brands.

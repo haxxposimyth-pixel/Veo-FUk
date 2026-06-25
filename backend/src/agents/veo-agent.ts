@@ -1412,6 +1412,16 @@ INSTRUCTIONS:
       console.error('[VeoAgent] postProcess failed to parse scene details:', err);
     }
 
+    // 1. Two presence flags computed early
+    const namedCharacter = activeCharacterIds.length > 0;
+
+    const sceneDescForFlags = (resolvedScene.scene_description || '').toLowerCase();
+    const visualTextForFlags = (data.visual || '').toLowerCase();
+    const combinedTextForFlags = sceneDescForFlags + " " + visualTextForFlags;
+
+    const humanRegex = /(?<!\b(?:robotic|mechanical|robot|robots|robot's)\s+)\b(operator|operators|crew|crewmember|crewmembers|worker|workers|attendant|sailor|captain|engineer|technician|deckhand|person|people|man|men|woman|women|hand|hands|finger|fingers|knuckle|knuckles|face|faces|torso|mouth|lip|lips)\b/i;
+    const humanInFrame = namedCharacter || humanRegex.test(combinedTextForFlags);
+
     // 1. Character Anchor sentence prepended to visual
     const characterAnchors: string[] = [];
     const forbiddenList: string[] = [];
@@ -1455,6 +1465,21 @@ INSTRUCTIONS:
       }
     }
 
+    // Programmatic cleanup of vague motion/invisible-change descriptors if LLM generated them
+    if (data.visual) {
+      data.visual = data.visual
+        .replace(/\bimperceptibly\b/gi, 'visibly')
+        .replace(/\bsubtly\b/gi, 'visibly')
+        .replace(/\bseamlessly\b/gi, '')
+        .replace(/\bseamless\b/gi, '')
+        .replace(/\bcomplex\b/gi, 'detailed')
+        .replace(/\bprofound\b/gi, '')
+        .replace(/\bdynamic data\b/gi, 'abstract shapes')
+        .replace(/\b(blurred|unreadable) (text|numbers|labels)\b/gi, 'no text or numbers; abstract/symbolic graphics only — no readable UI labels')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     // 3. Audio: choose speech mode — character dialogue, on-camera narrator, or silent VO
     const hasRealDialogue = isDialogue && dialogueLine && dialogueLine !== 'None' && dialogueLine !== 'None.';
 
@@ -1491,9 +1516,18 @@ INSTRUCTIONS:
       data.spoken_on_camera = true;
       data.narration_audio_source = 'veo_on_camera';
     } else {
-      const silenceDirective = "No characters speak. All characters' mouths remain closed and neutral; no lip movement, no talking. No spoken dialogue or voiceover in the audio — ambient and SFX only.";
-      if (!data.visual.includes("No characters speak.")) {
-        data.visual = `${data.visual} ${silenceDirective}`;
+      const audioNote = "No spoken dialogue, voiceover, or lip-sync — ambient and SFX only.";
+      if (humanInFrame) {
+        const charSilence = "No characters speak. All characters' mouths remain closed and neutral; no lip movement, no talking.";
+        if (!data.visual.includes("No characters speak.")) {
+          data.visual = `${data.visual} ${charSilence} ${audioNote}`;
+        } else if (!data.visual.includes("No spoken dialogue, voiceover, or lip-sync")) {
+          data.visual = `${data.visual} ${audioNote}`;
+        }
+      } else {
+        if (!data.visual.includes("No spoken dialogue, voiceover, or lip-sync")) {
+          data.visual = `${data.visual} ${audioNote}`;
+        }
       }
       audioAvoids = ["talking", "lip movement", "mouth moving", "speech", "voiceover", "singing"];
       data.dialogue = "None.";
@@ -1580,7 +1614,97 @@ INSTRUCTIONS:
 
     const ambientPalette = Array.isArray(todLighting.ambient_palette) ? todLighting.ambient_palette.join(', ') : (todLighting.ambient_palette || '');
 
-    data.lighting = `${todLighting.color_temperature_kelvin} light from ${todLighting.sun_position}, casting ${todLighting.shadow_quality}. Mood: ${todLighting.mood}. Ambient palette: ${ambientPalette}. ${lookStr}.`;
+    const loc = (bible.location_roster || []).find((l: any) => l.id === currentLocationId || l.location_id === currentLocationId);
+    const locType = (loc?.type || '').toLowerCase();
+    const locName = (loc?.name || '').toLowerCase();
+    const locDesc = (loc?.description || '').toLowerCase();
+    const sceneLocDesc = (resolvedScene.location_description || '').toLowerCase();
+    const sceneDesc = (resolvedScene.scene_description || '').toLowerCase();
+    const objectsText = (featuredObjectIds || []).map(id => {
+      const o = (bible.object_registry || []).find((obj: any) => obj.id === id || obj.object_id === id);
+      return o ? `${o.name} ${o.description}`.toLowerCase() : '';
+    }).join(' ');
+
+    const isInterior = 
+      locType.includes('interior') || 
+      locType === 'interior' || 
+      sceneLocDesc.includes('interior') || 
+      sceneDesc.includes('interior') || 
+      sceneDesc.includes('inside the') || 
+      sceneDesc.includes('within the') || 
+      sceneDesc.includes('cabin') || 
+      locName.includes('cabin') || 
+      locDesc.includes('cabin') || 
+      sceneLocDesc.includes('cabin');
+
+    let finalLightingStr = '';
+    if (isInterior) {
+      let interiorLightingType: 'control' | 'screen' | 'engine' | 'cgi' | 'generic' = 'generic';
+
+      if (
+        locName.includes('screen') || locDesc.includes('screen') || sceneLocDesc.includes('screen') || sceneDesc.includes('screen') ||
+        locName.includes('console') || locDesc.includes('console') || sceneLocDesc.includes('console') || sceneDesc.includes('console') ||
+        objectsText.includes('screen') || objectsText.includes('console') || objectsText.includes('monitor') || objectsText.includes('display') || objectsText.includes('ui')
+      ) {
+        interiorLightingType = 'screen';
+      } else if (
+        locName.includes('control') || locDesc.includes('control') || sceneLocDesc.includes('control') ||
+        locName.includes('ballast') || locDesc.includes('ballast') || sceneLocDesc.includes('ballast') ||
+        locName.includes('bridge') || locDesc.includes('bridge') || sceneLocDesc.includes('bridge') ||
+        locName.includes('cabin') || locDesc.includes('cabin') || sceneLocDesc.includes('cabin')
+      ) {
+        interiorLightingType = 'control';
+      } else if (
+        locName.includes('pump') || locDesc.includes('pump') || sceneLocDesc.includes('pump') ||
+        locName.includes('engine') || locDesc.includes('engine') || sceneLocDesc.includes('engine') ||
+        locName.includes('machinery') || locDesc.includes('machinery') || sceneLocDesc.includes('machinery') ||
+        locName.includes('generator') || locDesc.includes('generator') || sceneLocDesc.includes('generator') ||
+        objectsText.includes('engine') || objectsText.includes('pump') || objectsText.includes('machinery')
+      ) {
+        interiorLightingType = 'engine';
+      } else if (
+        locName.includes('cgi') || locDesc.includes('cgi') || sceneLocDesc.includes('cgi') ||
+        sceneDesc.includes('cgi') || sceneDesc.includes('cutaway') || sceneDesc.includes('diagram') ||
+        sceneDesc.includes('schematic') || sceneDesc.includes('cross-section') || sceneDesc.includes('internal view')
+      ) {
+        interiorLightingType = 'cgi';
+      }
+
+      const INTERIOR_LIGHTING_PROFILES = {
+        control: {
+          lighting_desc: "cool screen glow with dim overhead LEDs",
+          mood: "tense, focused",
+          palette: "#2d3748, #4a5568, #1a202c, #a0aec0"
+        },
+        screen: {
+          lighting_desc: "blue UI glow, casting dark-room falloff",
+          mood: "precise, clinical",
+          palette: "#0b192c, #1e3e62, #000000, #008dff"
+        },
+        engine: {
+          lighting_desc: "cool industrial LEDs, casting hard metal highlights",
+          mood: "relentless, industrial",
+          palette: "#718096, #2d3748, #1a202c, #e2e8f0"
+        },
+        cgi: {
+          lighting_desc: "neutral cinematic, technical lighting",
+          mood: "clean, technical",
+          palette: "#4a5568, #cbd5e0, #2d3748, #ffffff"
+        },
+        generic: {
+          lighting_desc: "neutral indoor illumination from recessed ceiling lights",
+          mood: "neutral",
+          palette: "#ffffff, #e2e8f0, #4a5568, #1a202c"
+        }
+      };
+
+      const profile = INTERIOR_LIGHTING_PROFILES[interiorLightingType];
+      finalLightingStr = `${profile.lighting_desc}. Mood: ${profile.mood}. Ambient palette: ${profile.palette}. ${lookStr}.`;
+    } else {
+      finalLightingStr = `${todLighting.color_temperature_kelvin} light from ${todLighting.sun_position}, casting ${todLighting.shadow_quality}. Mood: ${todLighting.mood}. Ambient palette: ${ambientPalette}. ${lookStr}.`;
+    }
+
+    data.lighting = finalLightingStr;
 
     // Narration-fit rule integration
     const SHOT_REGISTERS: Record<string, number> = {
@@ -1710,25 +1834,112 @@ INSTRUCTIONS:
       .filter(Boolean);
 
     const styleAvoids = styleConstraints?.avoidKeywords || [];
+
     const universalBaseline = [
       'watermark',
       'subtitles',
       'on-screen text',
-      'logo',
-      'deformed hands',
-      'extra limbs',
-      'morphing faces',
-      'extra fingers'
+      'logo'
     ];
+
+    const anatomyBaseline: string[] = [];
+    if (humanInFrame) {
+      anatomyBaseline.push(
+        'deformed hands',
+        'extra fingers',
+        'extra limbs',
+        'mutated anatomy',
+        'warped faces'
+      );
+    }
+
+    const characterBaseline: string[] = [];
+    if (namedCharacter) {
+      characterBaseline.push(
+        'identity change',
+        'wardrobe change mid-shot'
+      );
+    }
+
+    const isScreenOrUIData = 
+      locName.includes('screen') || locDesc.includes('screen') || sceneLocDesc.includes('screen') || sceneDesc.includes('screen') ||
+      locName.includes('console') || locDesc.includes('console') || sceneLocDesc.includes('console') || sceneDesc.includes('console') ||
+      locName.includes('data') || locDesc.includes('data') || sceneLocDesc.includes('data') || sceneDesc.includes('data') ||
+      objectsText.includes('screen') || objectsText.includes('console') || objectsText.includes('monitor') || objectsText.includes('display') || objectsText.includes('ui') ||
+      objectsText.includes('data') || objectsText.includes('graph') || objectsText.includes('chart') || objectsText.includes('diagram') ||
+      sceneDesc.includes('screen') || sceneDesc.includes('console') || sceneDesc.includes('ui') || sceneDesc.includes('data') ||
+      sceneDesc.includes('diagram') || sceneDesc.includes('schematic') || sceneDesc.includes('cross-section') || sceneDesc.includes('chart') ||
+      sceneDesc.includes('cutaway') || sceneDesc.includes('internal view');
+
+    const additionalAvoids: string[] = [];
+
+    if (isScreenOrUIData) {
+      additionalAvoids.push(
+        'readable text',
+        'numbers',
+        'letters',
+        'fake UI labels',
+        'flickering/warped interface',
+        'watermark',
+        'logo'
+      );
+    } else if (!humanInFrame) {
+      additionalAvoids.push(
+        'text',
+        'captions',
+        'labels',
+        'arrows',
+        'watermark',
+        'logo',
+        'unrealistic/toy-like scale',
+        'cartoon render',
+        'flickering geometry'
+      );
+    }
 
     const mergedList: string[] = [];
     const seen = new Set<string>();
 
-    for (const keyword of [...sceneSpecificList, ...styleAvoids, ...universalBaseline, ...forbiddenList, ...propAvoids, ...audioAvoids]) {
+    const allToMerge = [
+      ...anatomyBaseline,
+      ...characterBaseline,
+      ...additionalAvoids,
+      ...sceneSpecificList,
+      ...styleAvoids,
+      ...universalBaseline,
+      ...forbiddenList,
+      ...propAvoids,
+      ...audioAvoids
+    ];
+
+    const CHARACTER_ROSTER_KEYWORDS = [
+      'identity change',
+      'wardrobe change mid-shot'
+    ];
+
+    const ANATOMY_KEYWORDS = [
+      'deformed hands', 'extra fingers', 'extra limbs', 'mutated anatomy',
+      'warped faces', 'deformed body', 'mutated faces', 'warped face', 'morphing faces'
+    ];
+
+    const AUDIO_LIP_SYNC_KEYWORDS = [
+      'talking', 'lip movement', 'mouth moving', 'singing'
+    ];
+
+    for (const keyword of allToMerge) {
       if (!keyword) continue;
       const trimmed = keyword.trim();
       const lower = trimmed.toLowerCase();
       if (!lower || lower === 'none' || lower === 'none.') continue;
+
+      if (!namedCharacter && CHARACTER_ROSTER_KEYWORDS.some(term => lower.includes(term))) {
+        continue;
+      }
+
+      if (!humanInFrame && (ANATOMY_KEYWORDS.some(term => lower.includes(term)) || AUDIO_LIP_SYNC_KEYWORDS.some(term => lower.includes(term)))) {
+        continue;
+      }
+
       if (!seen.has(lower)) {
         seen.add(lower);
         mergedList.push(trimmed);
@@ -1998,7 +2209,7 @@ export function assembleVeoFullPrompt(prompt: VeoPrompt | any, index: number, sc
   if (prompt.spoken_on_camera === true || prompt.spoken_on_camera === 1) {
     narrationLine = `Narration (spoken on-camera by the Narrator with natural lip-sync; Veo generates the spoken audio for this line): ${cleanNarration}`;
   } else {
-    narrationLine = `Voiceover (post-production, non-diegetic — do NOT vocalize, lip-sync, or render as on-screen text; this clip's audio is silent): ${cleanNarration}`;
+    narrationLine = `Voiceover (post-production only — do NOT vocalize, lip-sync, subtitle, or render as on-screen text): ${cleanNarration}`;
   }
   const lines = [
     `Prompt ${index}:`,

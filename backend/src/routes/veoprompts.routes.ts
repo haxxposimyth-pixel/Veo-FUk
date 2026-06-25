@@ -99,6 +99,56 @@ function runShotDiversityPass(projectId: string, phaseNumber: number): void {
   }
 }
 
+async function runConnectionReconciliationPass(projectId: string, phaseNumber: number): Promise<void> {
+  try {
+    const prompts = VeoPromptRepository.findByPhase(projectId, phaseNumber);
+    if (prompts.length === 0) return;
+
+    prompts.sort((a, b) => Number(a.prompt_number) - Number(b.prompt_number));
+
+    const settings = SettingsRepository.getSettings();
+    const parsedPrompts = prompts.map(p => JSON.parse(p.raw_json));
+
+    for (let i = 0; i < parsedPrompts.length; i++) {
+      const prevPrompt = i > 0 ? parsedPrompts[i - 1] : null;
+      const currPrompt = parsedPrompts[i];
+      const nextPrompt = i < parsedPrompts.length - 1 ? parsedPrompts[i + 1] : null;
+
+      try {
+        const result = await veoAgent.reconcileConnections(
+          projectId,
+          settings.apiKey,
+          settings.model,
+          prevPrompt,
+          currPrompt,
+          nextPrompt
+        );
+
+        if (result && result.connection_curr) {
+          currPrompt.connection = result.connection_curr.trim();
+          if (currPrompt.connection && !/[.!?]$/.test(currPrompt.connection)) {
+            currPrompt.connection += '.';
+          }
+
+          // Re-assemble veo_full_prompt to ensure consistency
+          currPrompt.veo_full_prompt = assembleVeoFullPrompt(
+            currPrompt,
+            Number(currPrompt.prompt_number) || (i + 1),
+            currPrompt.title || ''
+          );
+
+          // Update in DB using VeoPromptRepository.updateById with full payload
+          await VeoPromptRepository.updateById(prompts[i].id, currPrompt);
+        }
+      } catch (err: any) {
+        console.error(`[VeoAgent] Connection reconciliation failed for prompt ${currPrompt.prompt_number} in phase ${phaseNumber}: ${err.message}`);
+      }
+    }
+  } catch (err: any) {
+    console.error(`[VeoAgent] Connection reconciliation pass failed for phase ${phaseNumber}: ${err.message}`);
+  }
+}
+
 // === VVS OPT FIX-1D START ===
 async function generateSinglePrompt(
   projectId: string,
@@ -584,6 +634,9 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
         // Run diversity post-pass
         runShotDiversityPass(id, phaseNumber);
 
+        // Run connection reconciliation pass
+        await runConnectionReconciliationPass(id, phaseNumber);
+
         sendSseChunk(id, sseAgentName, `\n--- Running Continuity Check for Phase ${phaseNumber} ---\n`);
         try {
           const phasePrompts = VeoPromptRepository.findByPhase(id, phaseNumber).map((p: any) => JSON.parse(p.raw_json));
@@ -706,6 +759,9 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
             // Run diversity post-pass
             runShotDiversityPass(id, phaseNum);
 
+            // Run connection reconciliation pass
+            await runConnectionReconciliationPass(id, phaseNum);
+
             // Run phase-level continuity scan right after this phase's prompts are generated!
             sendSseChunk(id, sseAgentName, `\n--- Running Continuity Scan for Phase ${phaseNum} ---\n`);
             try {
@@ -824,6 +880,9 @@ router.post('/:id/veo-prompts/:promptId/regenerate', (req: Request, res: Respons
       );
       // === VVS OPT FIX-1D END ===
       runShotDiversityPass(id, promptRow.phase_number);
+
+      // Run connection reconciliation pass
+      await runConnectionReconciliationPass(id, promptRow.phase_number);
 
       sendSseDone(id, sseAgentName);
     } catch (err: any) {
