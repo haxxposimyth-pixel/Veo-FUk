@@ -513,3 +513,44 @@ Semantic color custom properties used in VVS Studio:
 | **POST** | `/api/v1/admin/repair-narration-wordcounts` | Recalculate and repair narration word counts across all script phases. |
 | **POST** | `/api/v1/admin/remove-all-warning-tags` | Strip ALL legacy `[WARNING:...]` strings from existing prompts. |
 | **POST** | `/api/v1/admin/repair-veo-full-prompts` | Re-assemble and repair full textual prompt fields for all Veo prompts. |
+
+---
+
+## 8. Brand Grounding, Post-Production Overlays, and Hinglish Architecture
+
+### 8.1 Post-Production Overlay System
+The application features an overlay metadata system to generate post-production graphical suggestions separate from the video generation prompt:
+* **Data Schema**: The `OverlaySuggestion` structure consists of `{text, type: 'label'|'callout'|'title'|'annotation', target, timing?}`. It is defined in [project.types.ts:296-301](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/types/project.types.ts#L296-L301) and integrated into `VeoPromptData` ([project.types.ts:325](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/types/project.types.ts#L325)).
+* **Zod Validation**: Validated via `veoPromptAgentOutputSchema` in [agent.schema.ts:584-627](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/schemas/agent.schema.ts#L584-L627) (handling `overlay_suggestions`).
+* **Generation**: Generated dynamically within the main `VeoAgent` prompt pass.
+* **Strict Isolation**: To prevent text rendering issues in downstream generative models, overlays are strictly isolated. The `assembleVeoFullPrompt` helper in [veo-agent.ts:2242-2273](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts#L2242-L2273) excludes overlay suggestions entirely from the main `veo_full_prompt` text sent to the video generator.
+* **Frontend Visualization**: Rendered inside [SceneWorkspace.tsx:1348-1379](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/frontend/src/pages/SceneWorkspace.tsx#L1348-L1379) under a collapsible "Post-Production Overlays" panel.
+* **Export Support**: Serialized in Markdown (`exportPackage` ~line 107-114) and plain text (`exportTXT` ~line 212-219) formats in [export.service.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/services/export.service.ts).
+
+### 8.2 Overlay Grounding
+To ensure overlay text accurately matches the project narrative:
+* **Context Ingestion**: Compact representations of `location_roster` and `object_registry` are mapped and serialized directly into `getVeoSystemPrompt` in [veo.prompt.ts:14-25](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/veo.prompt.ts#L14-L25) and [veo.prompt.ts:49-53](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/veo.prompt.ts#L49-L53).
+* **Grounding Constraints**: Under the `OVERLAY GROUNDING RULES` in [veo.prompt.ts:185-189](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/veo.prompt.ts#L185-L189), the model is instructed to strictly anchor every overlay's `text` and `target` to registered database entities or explicit script facts (e.g. specs, measurements) rather than inventing specs.
+
+### 8.3 Conversational Hinglish Narration Register
+For projects requiring Hindi narration, the system supports a conversational "Hinglish" register:
+* **Language Guidelines**: The `hindi` configuration in [language-rules.ts:77](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/utils/language-rules.ts#L77) defines a custom `narrationHint` directing the model to write using Devanagari script for narration, transliterate standard technical terms (e.g., 'कंप्रेसर', 'रेफ्रिजरेंट'), and permit short uppercase abbreviations (e.g., AC, CGI) in Latin script.
+* **Whitelist & Purity Check**: In [language-purity.ts:84-88](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/utils/language-purity.ts#L84-L88), the `isAllowedLatinAbbreviation` regex (`/^[A-Z0-9]{1,5}$/`) acts as a whitelist for these short uppercase terms so they do not trigger purity check violations.
+* **Field Restrictions**: The system prompt context in [veo.prompt.ts:33](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/veo.prompt.ts#L33) enforces that all prompt fields (visual, lighting, camera, sound, etc.) remain strictly in English, with the narration line being the sole field permitted to use the target language.
+
+### 8.4 Brand Grounding & Hero-Product Exception
+To accurately depict real branded items without contaminating background scenes or generic props:
+* **Data Flag**: `is_branded_product` is defined as an optional boolean on `ObjectRegistryItem` in [project.types.ts:132](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/types/project.types.ts#L132) and Zod schema in [agent.schema.ts:173](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/schemas/agent.schema.ts#L173).
+* **Prompt Exception**: The `HERO-PRODUCT EXCEPTION` in [production-bible.prompt.ts:10](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/production-bible.prompt.ts#L10) specifies that if an object is marked as `is_hero_prop = true` and represents a specific commercial brand, it sets `is_branded_product = true` and details its real-world appearance/packaging/logos. Generic categories (e.g., container ship) or background props must stay clean (`is_branded_product = false`).
+* **Research Grounding**: The `ProductionBibleAgent` ([production-bible-agent.ts:163-167](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/production-bible-agent.ts#L163-L167)) makes a single grounded research call via `GeminiService.generateGroundedText` (using the `googleSearch` tool) when a commercial product is detected in the project topic, appending the facts to the user prompt.
+* **Avoid-List Exemption**: For scenes containing an object with `is_branded_product = true`, the prompt validator ([veo-agent.ts:140-143](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts#L140-L143)) and the prompt compiler post-process loop ([veo-agent.ts:1969-1974](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts#L1969-L1974)) bypass standard text/logo exclusions. They filter out `BRAND_AVOIDS` (`['brand names', 'logo', 'text', 'letters', 'typography', 'written words']`) from that scene's final avoid list.
+* **Design Principle**: All video surfaces remain unbranded by default to prevent video models from producing warped or illegible rendering artifacts. If clear logos or brand text are required, they are specified as post-production overlays.
+
+### 8.5 Narrative Pipeline & Transition Infrastructure
+* **Montage & List Coupling**: In [scene-agent.ts:650-653](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/scene-agent.ts#L650-L653), narration containing lists or montages is split into multiple scenes (Lead scene + subsequent b-roll scenes). The narration fragment is placed solely on the lead scene, and subsequent scenes receive an empty string `""` to prevent duplication.
+* **Gated Avoids (`humanInFrame`)**: In [veo-agent.ts:1880-1888](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts#L1880-L1888), anatomy-specific avoid items (deformed hands, faces, limbs) are only injected if a human/character presence is detected inside the frame (via `humanInFrame` flag).
+* **Interior-Aware Lighting & Palettes**: In [veo-agent.ts:1662-1739](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts#L1662-L1739), location types are resolved. Interior scenes skip sun-position lighting and golden-hour palettes, substituting indoor lighting profiles (e.g. `cool screen glow`, `dim overhead LEDs`, `industrial metal highlights`).
+* **Diversity & Connection Passes**: In [veoprompts.routes.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/routes/veoprompts.routes.ts):
+  - `runShotDiversityPass` (~line 71) scans consecutive prompts to prevent identical shot types and camera movements.
+  - `runConnectionReconciliationPass` (~line 102) reconciles connections after any diversity modifications using an AI transition pass.
+

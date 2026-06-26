@@ -387,6 +387,7 @@ export const SceneWorkspace: React.FC = () => {
 
   const [expandedVisualStates, setExpandedVisualStates] = useState<Record<string, boolean>>({});
   const [expandedPrompts, setExpandedPrompts] = useState<Record<string, boolean>>({});
+  const [expandedOverlays, setExpandedOverlays] = useState<Record<string, boolean>>({});
 
   const toggleVisualStateExpand = (sceneId: string) => {
     setExpandedVisualStates((prev) => ({
@@ -397,6 +398,13 @@ export const SceneWorkspace: React.FC = () => {
 
   const togglePromptExpand = (sceneId: string) => {
     setExpandedPrompts((prev) => ({
+      ...prev,
+      [sceneId]: !prev[sceneId],
+    }));
+  };
+
+  const toggleOverlayExpand = (sceneId: string) => {
+    setExpandedOverlays((prev) => ({
       ...prev,
       [sceneId]: !prev[sceneId],
     }));
@@ -1318,6 +1326,8 @@ export const SceneWorkspace: React.FC = () => {
                               </div>
                               {(() => {
                                 const isPromptExpanded = expandedPrompts[s.id] || false;
+                                const hasOverlays = pData.overlay_suggestions && pData.overlay_suggestions.length > 0;
+                                const isOverlayExpanded = expandedOverlays[s.id] || false;
                                 return (
                                   <>
                                     <p className={`text-[11px] font-mono text-gray-300 leading-normal bg-black/35 p-2.5 rounded border border-[#2a2a38]/30 select-text whitespace-pre-wrap transition-all duration-200 ${
@@ -1334,6 +1344,39 @@ export const SceneWorkspace: React.FC = () => {
                                     >
                                       {isPromptExpanded ? 'Show Less' : 'Read More'}
                                     </button>
+
+                                    {hasOverlays && (
+                                      <div className="mt-3 pt-3 border-t border-[#2A2A38]/30">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleOverlayExpand(s.id);
+                                          }}
+                                          className="flex items-center justify-between w-full text-[9px] font-bold text-purple-400 hover:text-purple-300 uppercase tracking-widest cursor-pointer"
+                                        >
+                                          <span>Post-Production Overlays ({pData.overlay_suggestions.length})</span>
+                                          <span className="text-[10px] font-mono">{isOverlayExpanded ? '▼' : '▶'}</span>
+                                        </button>
+                                        {isOverlayExpanded && (
+                                          <div className="mt-2 space-y-2 bg-purple-950/20 p-2.5 rounded border border-purple-500/20 select-text max-h-60 overflow-y-auto">
+                                            {pData.overlay_suggestions.map((item: any, idx: number) => (
+                                              <div key={idx} className="text-[11px] text-gray-300 leading-relaxed border-b border-purple-500/10 last:border-0 pb-1.5 last:pb-0">
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                  <span className="text-[9px] font-extrabold bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded uppercase tracking-wider">{item.type}</span>
+                                                  {item.target && (
+                                                    <span className="text-[10px] font-semibold text-purple-400">Target: {item.target}</span>
+                                                  )}
+                                                  {item.timing && (
+                                                    <span className="text-[10px] text-gray-500">[{item.timing}]</span>
+                                                  )}
+                                                </div>
+                                                <p className="text-gray-200 mt-1">{item.text}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </>
                                 );
                               })()}

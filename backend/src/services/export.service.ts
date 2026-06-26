@@ -104,6 +104,14 @@ export const ExportService = {
             md += `\n*Veo Prompt Formulation:*\n`;
             md += `> **Prompt Number:** Prompt ${globalIndex}\n`;
             md += `> **Unified Prompt:** \`${pData.veo_full_prompt}\`\n`;
+            if (pData.overlay_suggestions && pData.overlay_suggestions.length > 0) {
+              md += `> **Post-Production Overlays:**\n`;
+              pData.overlay_suggestions.forEach((suggest: any) => {
+                const targetStr = suggest.target ? ` (Target: ${suggest.target})` : '';
+                const timingStr = suggest.timing ? ` [${suggest.timing}]` : '';
+                md += `> - **[${suggest.type.toUpperCase()}]** ${suggest.text}${targetStr}${timingStr}\n`;
+              });
+            }
           }
           md += `\n`;
         });
@@ -200,7 +208,16 @@ export const ExportService = {
       txt += `  Dialogue: ${dialogueVal}\n`;
       txt += `Avoid: ${pData.avoid || ''}\n`;
       txt += `Connection: ${pData.connection || ''}\n`;
-      txt += `Narration: ${pData.narration || ''}\n\n`;
+      txt += `Narration: ${pData.narration || ''}\n`;
+      if (pData.overlay_suggestions && pData.overlay_suggestions.length > 0) {
+        txt += `Overlays:\n`;
+        pData.overlay_suggestions.forEach((suggest: any) => {
+          const targetStr = suggest.target ? ` (Target: ${suggest.target})` : '';
+          const timingStr = suggest.timing ? ` [${suggest.timing}]` : '';
+          txt += `  - [${suggest.type.toUpperCase()}] ${suggest.text}${targetStr}${timingStr}\n`;
+        });
+      }
+      txt += `\n`;
     });
 
     return txt;

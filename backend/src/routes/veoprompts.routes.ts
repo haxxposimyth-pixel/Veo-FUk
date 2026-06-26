@@ -187,13 +187,16 @@ async function generateSinglePrompt(
 
   // 3. Resolve Objects Featured
   const objectsFeatured = (scene.object_ids_featured || []).map((objId: string) => {
-    const obj = bibleData.object_registry.find((o: any) => o.id === objId);
+    const obj = bibleData.object_registry.find((o: any) => o.id === objId || o.object_id === objId);
     return obj ? {
+      id: obj.id || obj.object_id || objId,
+      object_id: obj.object_id || obj.id || objId,
       name: obj.name,
       description: obj.description,
       symbolic_meaning: obj.symbolic_meaning,
-      screen_time: obj.screen_time
-    } : { id: objId };
+      screen_time: obj.screen_time,
+      is_branded_product: obj.is_branded_product === true
+    } : { id: objId, object_id: objId };
   });
 
   // Compile fully resolved scene context object for veoAgent
@@ -208,7 +211,8 @@ async function generateSinglePrompt(
     transition_to_next: scene.transition_to_next,
     location_description: locationDescription,
     characters_present: charactersPresent,
-    objects_featured: objectsFeatured
+    objects_featured: objectsFeatured,
+    raw_json: sceneRow.raw_json
   };
   // === VVS OPT FIX-1D START ===
   let promptData = await veoAgent.run(

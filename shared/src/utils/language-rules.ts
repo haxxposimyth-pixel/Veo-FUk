@@ -74,7 +74,7 @@ const RULES_MAP: Record<string, LanguageRules> = {
     unitsPerClipDivisor: 13,
     purityKey: 'Hindi',
     cultureKey: 'hindi',
-    narrationHint: "Write in pure Devanagari script. End every sentence with a danda '।' character. Do NOT end sentences with a period ('.'). No Roman characters or English words in narration_text.",
+    narrationHint: "Write in natural conversational Hinglish using Devanagari script for narration_text. Keep everyday words in Hindi but use common English technical terms transliterated into Devanagari (e.g. 'कंप्रेसर' instead of 'संपीड़क', 'रेफ्रिजरेंट', 'इन्वर्टर', 'क्लोज्ड लूप'). Short uppercase Latin abbreviations (such as AC, CGI, PCB, R32) may remain in Latin script. End every sentence with a danda '।' character, never a period ('.').",
   },
   marathi: {
     script: 'devanagari',

@@ -7,6 +7,7 @@ Every character, location, and object you define becomes LAW — all downstream 
 AESTHETIC RULES (non-negotiable):
 - You must establish a COHERENT, consistent visual style matching the user's topic or style (e.g. photorealistic live-action, Pixar 3D animation, anime, claymation, 2D vector, watercolor).
 - CLEAN UNBRANDED SURFACES: Every object and character appearance_lock / visual_lock must describe clean, unbranded surfaces. NEVER include visible names, text, lettering, logos, decals, signs, or brand markings. For example, do NOT write "name clearly visible", "bold lettering", or specific names (like "MSC Isabella" or "MV Bharat Sagar"). Use clean, generic descriptions instead (e.g., "unmarked white superstructure", "clean steel hull with no markings, decals, or text", "clean generic paint finish"). Keep all other physical details such as colors (e.g. #003366), materials, and structural details, but ensure the surfaces are entirely text-free and unbranded.
+  HERO-PRODUCT EXCEPTION: If an object is the is_hero_prop AND represents a specific real-world commercial product (e.g. "Sting energy drink"), set is_branded_product = true and accurately describe its actual real-world branding (logo, wordmark, colors, packaging shape) in its visual_lock and description. If the hero prop is a generic category (e.g. "container ship", "air conditioner") with no single brand, it must remain is_branded_product = false and completely clean/unbranded. All non-hero/background objects and all characters must always remain completely clean and unbranded.
 - Strictly forbid mixing incompatible aesthetics: do NOT mix claymation, felt, stop-motion, puppet, cartoon, or craft elements with realistic cinematic visuals, or vice-versa, unless the user explicitly requested a hybrid style.
 - Keep aspect ratio locked to 16:9 unless otherwise specified.
 
@@ -17,7 +18,7 @@ RULES (non-negotiable):
    - presenter  → EXACTLY 1 entry: the on-screen narrator with is_narrator:true.
    Follow the approved story plan's character_list as the source of truth: if it has 0 characters, character_roster MUST be []. If the plan has characters, detail them.
 2. Locations   → 3–8 entries, IDs: LOC_001, LOC_002, …
-3. Objects     → 2–6 entries, IDs: OBJ_001, OBJ_002, … Limit this registry to relevance-based objects only: register hero props and objects that RECUR across multiple scenes or are story-critical. Do NOT pad or inventory one-off background props. Ensure the story's key/most important prop(s) are flagged as "is_hero_prop": true with a dense, detailed "visual_lock" string (specifying locked materials, colors, clean engravings/patterns with absolutely no text, lettering, or logos, and visual features, ensuring all surfaces are unmarked and unbranded).
+3. Objects     → 2–6 entries, IDs: OBJ_001, OBJ_002, … Limit this registry to relevance-based objects only: register hero props and objects that RECUR across multiple scenes or are story-critical. Do NOT pad or inventory one-off background props. Ensure the story's key/most important prop(s) are flagged as "is_hero_prop": true with a dense, detailed "visual_lock" string (specifying locked materials, colors, clean engravings/patterns with absolutely no text, lettering, or logos unless it is a branded product with is_branded_product = true, in which case detail its real branding).
 
 4. visual_style_lock must contain:
    - color_palette     : 3–6 hex or named colors
@@ -101,7 +102,8 @@ REQUIRED JSON STRUCTURE (use exactly these field names — no variations):
       "symbolic_meaning": "string",
       "screen_time": "string",
       "is_hero_prop": false,
-      "visual_lock": "string detailing exact locked colors, materials, engraving detail (never text/branding), and signature features if is_hero_prop is true. Must describe clean, unbranded surfaces with no visible text, lettering, names, or logos.",
+      "is_branded_product": false,
+      "visual_lock": "string detailing exact locked colors, materials, engraving detail (never text/branding unless is_branded_product is true), and signature features if is_hero_prop is true. Must describe clean, unbranded surfaces with no visible text, lettering, names, or logos unless is_branded_product is true.",
       "forbidden_variations": ["string listing things that must never change or vary on this object"]
     }
   ],
@@ -168,6 +170,7 @@ export function getBibleUserPrompt(
   storyPlan?: any,
   videoType: string = 'documentary',
   profileTreatment: string = 'narrative',
+  groundedProductFacts?: string,
 ): string {
   let treatmentInstruction = '';
   if (profileTreatment === 'factual') {
@@ -189,12 +192,16 @@ Profile Treatment: "${profileTreatment}"
 
 Requirements:
 - Write ALL bible fields in ENGLISH (Latin script) ONLY: character names, role, every description and appearance_lock field (skin_tone, hair, eyes, face_structure, primary_clothing, accessories, clothing_colors, clothing_era), location names/descriptions, object descriptions, lighting, color_temperature_kelvin, mood, ambient palettes — everything.
-- Ensure all characters, clothing, accessories, and objects described in appearance_locks and visual_locks have completely clean, unbranded, and text-free surfaces. NEVER include any visible names, lettering, text, logos, brand names, or markings (e.g., instead of specific vessel or brand names, describe them as unmarked, clean, generic surfaces).
+- Ensure all characters, clothing, accessories, and objects described in appearance_locks and visual_locks have completely clean, unbranded, and text-free surfaces. NEVER include any visible names, lettering, text, logos, brand names, or markings (unless the object represents a specific real-world commercial product and is_branded_product is set to true, in which case detail its real branding).
 - Character names MUST be in Latin script (e.g., "The Narrator", "Arjun", "Maya"). NEVER use any non-Latin script anywhere in the bible.
 - The "${language}" value is the NARRATION language only. It does NOT change the language of the bible. Do NOT translate any bible field into "${language}".
 - Visual tokens must align with the "${visualStyle}" aesthetic.
 - Characters should feel authentic to the topic's world.
 - Locations must be visually distinct and shootable in "${aspectRatio}".${treatmentInstruction}`;
+
+  if (groundedProductFacts) {
+    prompt += `\n\nGrounded Product Brand Research (use these facts to accurately describe the brand, packaging, colors, logo, and wordmark for the branded hero product in the object registry):\n"""\n${groundedProductFacts}\n"""`;
+  }
 
   if (storyPlan) {
     prompt += `\n\nApproved Story Plan (take these defined characters, locations, objects, and story outline as the absolute source of truth for the Production Bible. Detail them, assign them IDs, flesh out their DNA and descriptions, but do not deviate from these concepts):\n"""\nStory Outline: ${storyPlan.story_outline}\nCharacters:\n${typeof storyPlan.character_list === 'string' ? storyPlan.character_list : JSON.stringify(storyPlan.character_list)}\nLocations:\n${typeof storyPlan.location_list === 'string' ? storyPlan.location_list : JSON.stringify(storyPlan.location_list)}\nObjects:\n${typeof storyPlan.object_list === 'string' ? storyPlan.object_list : JSON.stringify(storyPlan.object_list)}\n"""`;

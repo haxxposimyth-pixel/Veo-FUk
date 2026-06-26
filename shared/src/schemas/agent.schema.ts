@@ -170,6 +170,7 @@ export const objectRegistryItemSchema = z
     screen_time:     z.string().optional().default('brief'),
     is_hero_prop:    z.boolean().optional().default(false),
     visual_lock:     z.string().optional().default(''),
+    is_branded_product: z.boolean().optional().default(false),
   })
   .passthrough()
   .transform((v) => {
@@ -183,6 +184,7 @@ export const objectRegistryItemSchema = z
       screen_time:      v.screen_time      ?? 'brief',
       is_hero_prop:     v.is_hero_prop     ?? false,
       visual_lock:      v.visual_lock      ?? '',
+      is_branded_product: v.is_branded_product ?? false,
     };
   });
 
@@ -600,6 +602,12 @@ export const veoPromptAgentOutputSchema = z
     avoid_contradiction: z.number().optional(),
     spoken_on_camera: z.boolean().optional().default(false),
     narration_audio_source: z.enum(['veo_on_camera', 'elevenlabs_vo']).optional().default('elevenlabs_vo'),
+    overlay_suggestions: z.array(z.object({
+      text: z.string(),
+      type: z.enum(['label', 'callout', 'title', 'annotation']),
+      target: z.string(),
+      timing: z.string().optional()
+    })).optional().default([]),
   })
   .passthrough()
   .transform((v) => ({
@@ -615,6 +623,7 @@ export const veoPromptAgentOutputSchema = z
     veo_full_prompt: v.veo_full_prompt ?? '',
     spoken_on_camera: v.spoken_on_camera ?? false,
     narration_audio_source: v.narration_audio_source ?? 'elevenlabs_vo',
+    overlay_suggestions: v.overlay_suggestions ?? [],
   }));
 
 export const veoPromptCompleteSchema = z

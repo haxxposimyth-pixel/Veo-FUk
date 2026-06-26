@@ -167,6 +167,38 @@ To use Google Cloud Vertex AI instead of Google AI Studio:
 
 ---
 
+## 🛠️ Monorepo Build, Grounding, and Testing Details
+
+### 1. Mandatory Build Order
+Since the backend and frontend packages consume schemas and types defined in the shared package, you **MUST** build the shared workspace before compiling downstream packages:
+1. Compile the shared workspace first:
+   ```bash
+   npm run build:shared
+   ```
+2. Build the backend and frontend packages:
+   ```bash
+   npm run build:backend
+   npm run build:frontend
+   ```
+
+### 2. Gemini Grounding & Google Search API Key Requirements
+The **Production Bible Agent** (`production-bible-agent.ts` line ~163-167) performs a grounded research query when the project topic centers on a specific real-world commercial product. This relies on `GeminiService.generateGroundedText` (defined at `gemini.service.ts` line ~857-910) using the `googleSearch` tool.
+* **Requirements**: A valid Gemini API Key with Google Search Grounding capabilities enabled.
+* **Troubleshooting**: If the configured key is leaked, invalid, or has search features disabled, the grounding step fails gracefully and logs a warning. The bible generator falls back automatically to the LLM's parametric knowledge. Well-known brands (such as *Sting Energy Drink*, *Coca-Cola*) will still resolve accurately, though less common or obscure products may lose precision.
+
+### 3. Test Runners
+To execute validation and benchmark scripts directly on the command line:
+* **Branded Product Validation**: Validates the branded product logic (Sting can with branding) vs generic category logic (unbranded Container Ship). Run from the `backend/` workspace:
+  ```bash
+  npx tsx src/test/query-objects.ts
+  ```
+* **Resume/Benchmark Runner**: Runs or resumes the agent pipeline benchmarks:
+  ```bash
+  npx tsx src/test/resume-benchmark.ts
+  ```
+
+---
+
 ## 📝 License
 
 This project is private and proprietary. All rights reserved.

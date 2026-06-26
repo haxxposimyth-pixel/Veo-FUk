@@ -22,9 +22,9 @@ async function checkKeys() {
   const rateLimitedKeys: string[] = [];
   const invalidKeys: string[] = [];
 
-  // Let's test a subset of them (e.g. first 15 or so) to find a working one quickly
-  const keysToTest = uniqueKeys.slice(0, 30);
-  console.log(`Testing first ${keysToTest.length} keys...`);
+  // Test all of them to find all working ones
+  const keysToTest = uniqueKeys;
+  console.log(`Testing all ${keysToTest.length} keys...`);
 
   for (let i = 0; i < keysToTest.length; i++) {
     const key = keysToTest[i];

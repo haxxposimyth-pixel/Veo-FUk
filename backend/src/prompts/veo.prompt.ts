@@ -11,6 +11,18 @@ export const getVeoSystemPrompt = (project: any, bible: any, profile?: ContentPr
 
   const aspectRatio = project?.aspect_ratio || '16:9';
 
+  const compactLocations = (bible.location_roster || []).map((l: any) => ({
+    name: l.name,
+    type: l.type
+  }));
+
+  const compactObjects = (bible.object_registry || []).map((o: any) => ({
+    name: o.name,
+    category: o.category,
+    is_hero_prop: o.is_hero_prop,
+    is_branded_product: o.is_branded_product
+  }));
+
   const dynamicContext = `
   PROJECT CONTEXT (APPLY TO EVERY SCENE):
   Topic: ${project.topic}
@@ -34,6 +46,12 @@ export const getVeoSystemPrompt = (project: any, bible: any, profile?: ContentPr
     ${(bible.visual_style_lock?.forbidden_elements || []).join(', ')}
   Film Grain: ${bible.visual_style_lock?.film_grain ?? false}
  
+  LOCATION ROSTER (COMPACT):
+  ${JSON.stringify(compactLocations, null, 2)}
+
+  OBJECT REGISTRY (COMPACT):
+  ${JSON.stringify(compactObjects, null, 2)}
+
   CHARACTER BLUEPRINTS (DNA):
   Ensure that when a character is active in the scene, their visual features are locked EXACTLY to their DNA attributes:
   ${JSON.stringify((bible.character_roster || []).map((c: any) => ({ id: c.id, name: c.name, dna: c.dna })), null, 2)}
@@ -130,7 +148,7 @@ AUDIO CONSISTENCY RULE:
 
 ## OUTPUT FORMAT LOCK:
 Your JSON output must contain these exact field keys and no others:
-visual, lens, lighting, camera, ambient_sound, sfx, dialogue, avoid, connection, narration, shot, shot_type, duration_seconds, scene_type.
+visual, lens, lighting, camera, ambient_sound, sfx, dialogue, avoid, connection, narration, shot, shot_type, duration_seconds, scene_type, overlay_suggestions.
 
 Do not output: veo_full_prompt, sound (as a nested object), timestamp, index, scene_number, or any field not listed above.
 
@@ -153,8 +171,22 @@ REQUIRED JSON STRUCTURE (use exactly these field names without omission):
   "connection": "string",
   "narration": "string (the exact voiceover line provided, returned without alteration)",
   "duration_seconds": 8,
-  "scene_type": "standard"
-}`;
+  "scene_type": "standard",
+  "overlay_suggestions": [
+    {
+      "text": "string (on-screen label, callout, chapter title, or diagram annotation derived from narration and scene context, like component names, key terms, or numbers like '70–80°C'. Labels MUST always be in ENGLISH even if the narration is in Hindi)",
+      "type": "label | callout | title | annotation",
+      "target": "string (visual element this anchors to, e.g. 'Compressor inlet' or 'willis carrier portrait')",
+      "timing": "string (optional timing annotation)"
+    }
+  ]
+}
+
+OVERLAY GROUNDING RULES:
+1. Every overlay_suggestions text/target MUST anchor to an entity present in object_registry/location_roster, OR an explicit fact from the scene's narration/script (e.g. a temperature, year, spec).
+2. NEVER invent a name, place, or spec not present in those sources.
+3. These are post-production editor notes that must NOT describe anything rendered in the footage itself. They are separate editorial metadata and must never be injected into the Veo visual prompt.
+`;
 };
 
 export const getVeoUserPrompt = (

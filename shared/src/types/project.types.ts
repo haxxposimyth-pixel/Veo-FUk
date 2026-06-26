@@ -129,6 +129,9 @@ export interface ObjectRegistryItem {
   forbidden_variations?: string[];
   symbolic_meaning: string;
   screen_time: string;
+  is_branded_product?: boolean;
+  is_hero_prop?: boolean;
+  visual_lock?: string;
 }
 
 export interface VisualStyleLock {
@@ -290,6 +293,13 @@ export interface Scene {
 
 // ─── Veo Prompts ─────────────────────────────────────────────────────────────
 
+export interface OverlaySuggestion {
+  text: string;
+  type: 'label' | 'callout' | 'title' | 'annotation';
+  target: string;
+  timing?: string;
+}
+
 export interface VeoPromptData {
   prompt_number: number | string;  // e.g. "P1_S1_V1" or 1
   visual: string;
@@ -312,6 +322,7 @@ export interface VeoPromptData {
   bible_version?: number;
   spoken_on_camera?: boolean;
   narration_audio_source?: 'veo_on_camera' | 'elevenlabs_vo';
+  overlay_suggestions?: OverlaySuggestion[];
 }
 
 export interface VeoPrompt {

@@ -93,7 +93,26 @@ function validatePrompt(
 
   // 4. Avoid list checks
   let avoidItems = prompt.avoid.split(',').map((i: any) => i.trim()).filter(Boolean);
-  const mandatoryAvoids = ['modern logo', 'smartphone screen', 'digital artifacts', 'motion blur', 'neon lights'];
+  
+  let hasBrandedProductFeatured = false;
+  try {
+    const rawSceneJson = resolvedScene?.raw_json ? (typeof resolvedScene.raw_json === 'string' ? JSON.parse(resolvedScene.raw_json) : resolvedScene.raw_json) : null;
+    const featuredObjectIds = rawSceneJson?.object_ids_featured || [];
+    const bibleData = (bible as any).visual_style_lock ? bible : (bible.raw_json ? JSON.parse(bible.raw_json) : {});
+    hasBrandedProductFeatured = (featuredObjectIds || []).some((objId: string) => {
+      const obj = (bibleData.object_registry || []).find((o: any) => o.id === objId || o.object_id === objId);
+      return obj && obj.is_branded_product === true;
+    });
+  } catch (err) {
+    // Ignore error
+  }
+
+  let mandatoryAvoids = ['modern logo', 'smartphone screen', 'digital artifacts', 'motion blur', 'neon lights'];
+  const BRAND_AVOIDS = ['brand names', 'logo', 'text', 'letters', 'typography', 'written words'];
+
+  if (hasBrandedProductFeatured) {
+    mandatoryAvoids = mandatoryAvoids.filter((item: string) => !BRAND_AVOIDS.some((term: string) => item.toLowerCase().includes(term)));
+  }
   
   // Ensure mandatory elements are present
   for (const item of mandatoryAvoids) {
@@ -104,7 +123,11 @@ function validatePrompt(
 
   // Production Bible forbidden elements
   const bibleData = (bible as any).visual_style_lock ? bible : (bible.raw_json ? JSON.parse(bible.raw_json) : {});
-  const forbidden = bibleData.visual_style_lock?.forbidden_elements || [];
+  let forbidden = bibleData.visual_style_lock?.forbidden_elements || [];
+  if (hasBrandedProductFeatured) {
+    forbidden = forbidden.filter((item: string) => !BRAND_AVOIDS.some((term: string) => item.toLowerCase().includes(term)));
+  }
+
   for (const item of forbidden) {
     if (!avoidItems.some((existing: any) => existing.toLowerCase().includes(item.toLowerCase()))) {
       avoidItems.push(item);
@@ -113,6 +136,11 @@ function validatePrompt(
 
   // Keep unique items
   avoidItems = Array.from(new Set(avoidItems));
+
+  // If branded product, filter out any existing items matching BRAND_AVOIDS
+  if (hasBrandedProductFeatured) {
+    avoidItems = avoidItems.filter((item: string) => !BRAND_AVOIDS.some((term: string) => item.toLowerCase().includes(term)));
+  }
 
   // Limit count between 6 and 10 items
   if (avoidItems.length < 6) {
@@ -819,6 +847,7 @@ The previous scene in this location used ${prevKelvin}K lighting. Your lighting 
       duration_seconds: 8,
       scene_type: 'standard',
       veo_full_prompt: '',
+      overlay_suggestions: [],
     };
 
     // === VVS FIX QUOTA-MESSAGE START ===
@@ -1412,6 +1441,11 @@ INSTRUCTIONS:
       console.error('[VeoAgent] postProcess failed to parse scene details:', err);
     }
 
+    const hasBrandedProductFeatured = (featuredObjectIds || []).some((objId: string) => {
+      const obj = (bible?.object_registry || []).find((o: any) => o.id === objId || o.object_id === objId);
+      return obj && obj.is_branded_product === true;
+    });
+
     // 1. Two presence flags computed early
     const namedCharacter = activeCharacterIds.length > 0;
 
@@ -1931,6 +1965,13 @@ INSTRUCTIONS:
       const trimmed = keyword.trim();
       const lower = trimmed.toLowerCase();
       if (!lower || lower === 'none' || lower === 'none.') continue;
+
+      if (hasBrandedProductFeatured) {
+        const BRAND_AVOIDS = ['brand names', 'logo', 'text', 'letters', 'typography', 'written words'];
+        if (BRAND_AVOIDS.some(term => lower.includes(term))) {
+          continue;
+        }
+      }
 
       if (!namedCharacter && CHARACTER_ROSTER_KEYWORDS.some(term => lower.includes(term))) {
         continue;

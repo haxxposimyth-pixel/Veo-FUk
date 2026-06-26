@@ -7,6 +7,94 @@ import { ProjectRepository } from '../db/repositories/project.repo';
 import { z } from 'zod';
 import db from '../db/connection';
 import crypto from 'crypto';
+import { GeminiService } from '../services/gemini.service';
+import { SettingsRepository } from '../db/repositories/settings.repo';
+
+export async function getProductBrandIfBranded(
+  topic: string,
+  title: string | undefined,
+  apiKey: string | undefined,
+  modelName?: string
+): Promise<string | null> {
+  const text = `${topic} ${title || ''}`.toLowerCase();
+  const knownBrands = [
+    'sting', 'coca-cola', 'coke', 'pepsi', 'red bull', 'monster energy', 'iphone', 'nike', 'adidas', 'starbucks', 
+    'soda', 'beverage', 'energy drink', 'sneaker', 'smartphone'
+  ];
+  for (const brand of knownBrands) {
+    if (text.includes(brand)) {
+      if (brand === 'sting') return 'Sting energy drink';
+      if (brand === 'coke' || brand === 'coca-cola') return 'Coca-Cola';
+      if (brand === 'pepsi') return 'Pepsi';
+      if (brand === 'red bull') return 'Red Bull energy drink';
+      if (brand === 'monster energy') return 'Monster Energy drink';
+      if (brand === 'iphone') return 'iPhone';
+      return brand;
+    }
+  }
+
+  try {
+    const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
+    if (!activeApiKey) return null;
+
+    const settings = SettingsRepository.getSettings();
+    const isVertex = settings.vertexEnabled === true;
+    const geminiService = new GeminiService(activeApiKey);
+    if (isVertex) {
+      const gcpProjectId = settings.gcpProjectId;
+      const gcpLocation = settings.gcpLocation || 'us-central1';
+      if (gcpProjectId) {
+        geminiService.initVertexAI(gcpProjectId, gcpLocation);
+      }
+    }
+
+    const schema: z.ZodType<any, any, any> = z.object({
+      result: z.string().optional(),
+      brand: z.string().optional(),
+      brand_name: z.string().optional(),
+      product_name: z.string().optional(),
+      canonical_name: z.string().optional()
+    }).transform((data) => {
+      const val = data.result ?? data.brand ?? data.brand_name ?? data.product_name ?? data.canonical_name;
+      return {
+        result: val || 'NONE'
+      };
+    });
+
+    const classificationPrompt = `Analyze this video topic and title:
+Topic: "${topic}"
+Title: "${title || ''}"
+
+Does this video topic/title center on a specific real-world commercial product or brand?
+If yes, return ONLY its canonical product name (e.g. 'Sting energy drink').
+If it is a generic category or non-product topic, return NONE.
+
+Return the result in a JSON object with the key "result", like:
+{
+  "result": "Sting energy drink"
+}
+or
+{
+  "result": "NONE"
+}`;
+
+    const response = await geminiService.generateJSON(
+      modelName || settings.model || 'gemini-2.5-flash',
+      classificationPrompt,
+      schema,
+      { temperature: 0.1, maxOutputTokens: 100 }
+    );
+
+    const result = response?.data?.result?.trim();
+    if (result && result.toUpperCase() !== 'NONE') {
+      return result;
+    }
+  } catch (err) {
+    console.warn('[getProductBrandIfBranded] LLM product detection failed:', err);
+  }
+
+  return null;
+}
 
 function applyBibleSystemPromptModifications(prompt: string): string {
   let normalized = prompt.replace(/\r\n/g, '\n');
@@ -129,8 +217,32 @@ export class ProductionBibleAgent extends BaseAgent {
       }
     }
 
+    let groundedProductFacts: string | undefined = undefined;
+    const detectedBrand = await getProductBrandIfBranded(topic, proj?.title, apiKey, modelName);
+    if (detectedBrand) {
+      console.info(`[ProductionBibleAgent] Detected branded commercial product "${detectedBrand}", running grounded search...`);
+      try {
+        const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
+        if (activeApiKey) {
+          const geminiService = new GeminiService(activeApiKey);
+          const researchPrompt = `Search for official branding details of: ${detectedBrand}. Focus on packaging/can-or-bottle shape, official color hexes, logo motif, and wordmark.`;
+          const researchResult = await geminiService.generateGroundedText(
+            modelName || 'gemini-2.5-pro',
+            researchPrompt,
+            activeApiKey
+          );
+          if (researchResult) {
+            groundedProductFacts = researchResult.text;
+            console.info(`[ProductionBibleAgent] Branded product search succeeded.`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[ProductionBibleAgent] Branded product search failed:`, err);
+      }
+    }
+
     const systemPrompt = applyBibleSystemPromptModifications(getBibleSystemPrompt());
-    const userPrompt   = getBibleUserPrompt(topic, visualStyle, language, aspectRatio, youtubeTranscript, storyPlan, resolvedVideoType, profileTreatment);
+    const userPrompt   = getBibleUserPrompt(topic, visualStyle, language, aspectRatio, youtubeTranscript, storyPlan, resolvedVideoType, profileTreatment, groundedProductFacts);
 
     const bibleData = await this.generateStructured<ProductionBibleData>(
       projectId,

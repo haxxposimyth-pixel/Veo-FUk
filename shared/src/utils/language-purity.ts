@@ -84,7 +84,8 @@ export function checkNarrationPurity(
     const targetRegex = NON_LATIN_SCRIPTS[purityKey!];
     for (const word of words) {
       // A word is foreign in a non-Latin target if it contains absolutely NO characters from the target script
-      if (!targetRegex.test(word)) {
+      const isAllowedLatinAbbreviation = /^[A-Z0-9]{1,5}$/.test(word);
+      if (!targetRegex.test(word) && !isAllowedLatinAbbreviation) {
         foreignWords.push(word);
       }
     }
