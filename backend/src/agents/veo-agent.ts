@@ -863,10 +863,11 @@ The previous scene in this location used ${prevKelvin}K lighting. Your lighting 
         try {
           let retryCount = 0;
           let currentPrompt = promptToSend;
-          let visualTruncated = false;
+          let visualNeedsRetry = false;
+          let retryPromptInstruction = '';
 
-          // Loop 1: Truncation Retry Loop (limited to 0 retries to flatten calls)
-          while (retryCount <= 0) {
+          // Loop 1: Visual Budget & Truncation Retry Loop (Max 1 retry)
+          while (retryCount <= 1) {
             try {
               const generated = await this.generateStructured<VeoPromptData>(
                 projectId,
@@ -883,30 +884,45 @@ The previous scene in this location used ${prevKelvin}K lighting. Your lighting 
                 onChunk
               );
 
-              // Check if visual ends mid-sentence (ends with . or ! or ?)
               const visualTrimmed = (generated.visual || '').trim();
               const endsWithSentenceTerminator = /[.!?]$/.test(visualTrimmed);
+              const visualWords = visualTrimmed.split(/\s+/).filter(Boolean);
+
               if (!endsWithSentenceTerminator) {
                 console.warn(`[VeoAgent] Visual ended mid-sentence on attempt ${retryCount + 1}.`);
-                visualTruncated = true;
+                if (retryCount === 0) {
+                  visualNeedsRetry = true;
+                  retryPromptInstruction = `[RETRY INSTRUCTION - CONCISE REWRITE]: The previous output was truncated or ended mid-sentence. You must rewrite the visual description to be more concise (MAXIMUM 40 words) and ensure it finishes completely with a sentence terminator (. or ! or ?).`;
+                } else {
+                  visualNeedsRetry = false;
+                }
+                data = generated;
+              } else if (visualWords.length > 80) {
+                console.warn(`[VeoAgent] Visual exceeded 80 words (${visualWords.length} words) on attempt ${retryCount + 1}.`);
+                if (retryCount === 0) {
+                  visualNeedsRetry = true;
+                  retryPromptInstruction = `[RETRY INSTRUCTION - CONDENSE REWRITE]: The previous visual description was too long (${visualWords.length} words). You must rewrite it to be strictly under 80 words (target ~65 words). Keep the single dominant subject and action, and preserve the concrete physical details. You must DROP any secondary/listy elements, multiple simultaneous activities, and meta-phrasing about realism or aesthetics (e.g. do not say "rendered with realistic textures" or "documentary aesthetic"). Every word must count and describe a visible physical detail. Ends with a period.`;
+                } else {
+                  visualNeedsRetry = false;
+                }
                 data = generated;
               } else {
-                visualTruncated = false;
+                visualNeedsRetry = false;
                 data = generated;
                 break;
               }
             } catch (err) {
               console.error(`[VeoAgent] Generation error on attempt ${retryCount + 1}:`, err);
-              visualTruncated = true;
-              if (retryCount === 2) {
-                // All retries failed
+              if (retryCount === 1) {
                 throw err;
               }
+              visualNeedsRetry = true;
+              retryPromptInstruction = `[RETRY INSTRUCTION]: The previous generation failed or returned invalid JSON. Rewrite the response adhering strictly to the schema, keeping the visual description under 80 words.`;
             }
 
-            if (visualTruncated && retryCount < 0) {
+            if (visualNeedsRetry && retryCount === 0) {
               retryCount++;
-              currentPrompt = `${promptToSend}\n\n[RETRY INSTRUCTION - CONCISE REWRITE]: The previous output was truncated or ended mid-sentence. You must rewrite the visual description to be more concise (MAXIMUM 40 words) and ensure it finishes completely with a sentence terminator (. or ! or ?).`;
+              currentPrompt = `${promptToSend}\n\n${retryPromptInstruction}`;
             } else {
               break;
             }
@@ -1421,6 +1437,33 @@ INSTRUCTIONS:
     enableValidators: boolean = true
   ): Promise<any> {
     // Resolve scene metadata from raw_json in DB for character ids, objects, dialogue, time of day
+    if (data.visual) {
+      let visualTrimmed = data.visual.trim();
+      let visualWords = visualTrimmed.split(/\s+/).filter(Boolean);
+      if (visualWords.length > 80) {
+        console.warn(`[VeoAgent] Visual still exceeds 80 words (${visualWords.length} words) inside postProcess. Applying sentence-boundary trim...`);
+        const sentences = visualTrimmed.match(/[^.!?]+[.!?]+/g) || [visualTrimmed];
+        while (sentences.length > 1) {
+          const tentativeText = sentences.slice(0, -1).join(' ').trim();
+          const tentativeWords = tentativeText.split(/\s+/).filter(Boolean);
+          if (tentativeWords.length >= 40) {
+            sentences.pop();
+            visualTrimmed = tentativeText;
+            visualWords = tentativeWords;
+            if (visualWords.length <= 80) {
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+        data.visual = visualTrimmed;
+        if (data.visual && !/[.!?]$/.test(data.visual)) {
+          data.visual += '.';
+        }
+      }
+    }
+
     let isDialogue = false;
     let dialogueLine = "";
     let featuredObjectIds: string[] = [];
@@ -1503,15 +1546,42 @@ INSTRUCTIONS:
     if (data.visual) {
       data.visual = data.visual
         .replace(/\bimperceptibly\b/gi, 'visibly')
-        .replace(/\bsubtly\b/gi, 'visibly')
+        .replace(/\b(subtle|subtly)\b/gi, '')
         .replace(/\bseamlessly\b/gi, '')
         .replace(/\bseamless\b/gi, '')
         .replace(/\bcomplex\b/gi, 'detailed')
         .replace(/\bprofound\b/gi, '')
         .replace(/\bdynamic data\b/gi, 'abstract shapes')
         .replace(/\b(blurred|unreadable) (text|numbers|labels)\b/gi, 'no text or numbers; abstract/symbolic graphics only — no readable UI labels')
+        .replace(/\b(beautiful(?:ly)?|stunning(?:ly)?|majestic(?:ally)?|breathtaking(?:ly)?|epic(?:ally)?|gorgeous(?:ly)?|mesmerizing(?:ly)?|captivating(?:ly)?|dramatic(?:ally)?)\b/gi, '')
+        .replace(/\blarge-format sensor\b/gi, 'camera')
+        .replace(/\b(high dynamic range|HDR|cinematic color grading|color grading|photorealistic CGI integration|maintains visual fidelity|visual fidelity|rendered with realistic textures|documentary aesthetic)\b/gi, '')
         .replace(/\s+/g, ' ')
+        .replace(/\s+([.,!?])/g, '$1')
+        .replace(/,\s*,+/g, ',')
+        .replace(/\b(with|by|using)\s+(a|an|the)?\s*,\s*(conveying|showing|revealing|emphasizing|highlighting|pointing|facing|displaying|reflecting|capturing|having|featuring)\b/gi, ', $3')
+        .replace(/\b(and|or|with|by|using|a|an|the)(?:\s+(?:and|or|with|by|using|a|an|the))*\s*(?=[.,!?])/gi, '')
+        .replace(/\b(a|an)\s*,\s*and\b/gi, '$1')
+        .replace(/\b(a|an)\s*,\s*/gi, '$1 ')
+        .replace(/\bwith\s+and\b/gi, 'with')
+        .replace(/\bwith\s+a\s+and\b/gi, 'with a')
+        .replace(/\bwith\s*,\s*and\b/gi, 'with')
+        .replace(/\bwith\s*,\s*/gi, 'with ')
+        .replace(/,\s*and\s*\./gi, '.')
+        .replace(/,\s*\./gi, '.')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+([.,!?])/g, '$1')
         .trim();
+
+      // Clean up dangling or mismatched a/an articles after stripping adjectives
+      data.visual = data.visual
+        .replace(/\ban\s+([bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ])/g, 'a $1')
+        .replace(/\ba\s+([aeiouAEIOU])/g, 'an $1');
+
+      // Capitalize first letter of visual if it was made lowercase due to a stripped word at the start of a sentence
+      if (data.visual.length > 0) {
+        data.visual = data.visual.charAt(0).toUpperCase() + data.visual.slice(1);
+      }
     }
 
     // 3. Audio: choose speech mode — character dialogue, on-camera narrator, or silent VO

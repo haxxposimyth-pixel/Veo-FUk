@@ -9,6 +9,23 @@ export const getVeoSystemPrompt = (project: any, bible: any, profile?: ContentPr
       ? 'Static | Slow push in | Slow pull back | Pan left | Pan right | Tilt up | Tilt down | Tracking shot | Dolly in | Dolly out | Rack focus'
       : 'Static | Slow push in | Slow pull back | Pan left | Pan right | Tilt up | Tilt down | Tracking shot | Handheld | Crane up | Crane down | Dolly in | Dolly out | Whip pan | Rack focus';
 
+  const adjectiveVarietyRule = profile?.id === 'documentary'
+    ? `- STRICT OBSERVATIONAL REALISM (HARD RULE): Do NOT use any evaluative or filler adjectives that add no visible information (such as "beautiful", "stunning", "majestic", "breathtaking", "epic", "gorgeous", "mesmerizing", "captivating", "dramatic"). You must describe ONLY concrete, observable nouns, physical materials, and literal actions (e.g., "rust streaks down the riveted iron hull" instead of "a beautiful old ship"). Every word must describe a visible physical detail.`
+    : `- Prefer concrete, observable nouns, physical materials, and literal actions over subjective evaluative adjectives (such as "beautiful", "stunning", "majestic", "breathtaking", "epic", "gorgeous", "mesmerizing", "captivating", "dramatic"). Focus on physical descriptors rather than emotional reactions (e.g., "rust streaks down the riveted iron hull" instead of "a beautiful old ship"). Narrative/viral projects allow limited stylistic flourish, but visual descriptions must remain anchored to observable physical realities.`;
+
+  const environmentalRealismRule = profile?.id === 'documentary'
+    ? `- ENVIRONMENTAL REALISM & MICRO-PHYSICS (HARD RULE): Enrich the description with physically-grounded, observable detail appropriate to the materials and environment actually present in the scene. As relevant, describe particulate/atmosphere (dust, steam, mist, spray, haze), material behavior & wear (rust streaks, scratches, condensation, grease, worn paint, water beading), light interaction with surfaces (glint, reflection, refraction, shadow falloff), and motion physics (ripples, sway, settling, vibration). Use grounded, observational physical detail only (no stylization). Do not add new subjects or secondary actions. Word-neutral: substitute generic descriptors with these concrete details, target 60 to 75 words without increasing overall length. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`
+    : `- ENVIRONMENTAL REALISM & MICRO-PHYSICS: Enrich the description with physically-grounded, observable detail appropriate to the materials and environment actually present in the scene. As relevant, describe particulate/atmosphere (dust, steam, mist, spray, haze), material behavior & wear (rust streaks, scratches, condensation, grease, worn paint, water beading), light interaction with surfaces (glint, reflection, refraction, shadow falloff), and motion physics (ripples, sway, settling, vibration). Same physical grounding is required, but limited cinematic emphasis is allowed. Do not add new subjects or secondary actions. Word-neutral: substitute generic descriptors with these concrete details, target 60 to 75 words without increasing overall length. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`;
+
+  const shotCompositionRule = profile?.id === 'documentary'
+    ? `- Shot: A concise phrase or single sentence describing camera framing, angle, height, and spatial depth layering (e.g. "eye-level medium shot on the subject, centering them according to the rule of thirds, with foreground equipment softened and background walls blurred").
+  - OBSERVATIONAL FRAMING & DEPTH LAYERING (HARD RULE): Describe spatial depth via layering (clear foreground, midground, and background elements, specifying which elements read sharp vs. softened/hazy). Express layering physically, NEVER use banned camera/rendering jargon ("depth of field", "bokeh", "lens flare", "focus", "focused", "unfocused", "out-of-focus"). Define subject placement (rule-of-thirds, eyelines, natural headroom) and camera perspective (stable, eye-level, naturalistic angles for observational honesty). Keep it to one concise phrase or sentence.
+  - SEPARATION OF CONCERNS: The Shot field describes only the framing (angle, height, layering intent). The Visual field describes physical scene content and actions. Do not duplicate or contradict between them, and keep ONE coherent shot type.`
+    : `- Shot: A concise phrase or single sentence describing camera framing, angle, height, and spatial depth layering (e.g. "low-angle medium shot on the subject, centering them according to the rule of thirds, with foreground equipment softened and background walls blurred").
+  - DYNAMIC COMPOSITION & DEPTH LAYERING: Describe spatial depth via layering (clear foreground, midground, and background elements, specifying which elements read sharp vs. softened/hazy). Express layering physically, NEVER use banned camera/rendering jargon ("depth of field", "bokeh", "lens flare", "focus", "focused", "unfocused", "out-of-focus"). Define subject placement (rule-of-thirds, leading lines, dramatic headroom/eyelines) and camera perspective (dynamic heights, low-angle, or high-angle views allowed). Keep it to one concise phrase or sentence.
+  - SEPARATION OF CONCERNS: The Shot field describes only the framing (angle, height, layering intent). The Visual field describes physical scene content and actions. Do not duplicate or contradict between them, and keep ONE coherent shot type.`;
+
+
   const aspectRatio = project?.aspect_ratio || '16:9';
 
   const compactLocations = (bible.location_roster || []).map((l: any) => ({
@@ -88,11 +105,17 @@ CINEMATIC INTENT — MANDATORY RULES:
 
 Design every field with this constraint in mind:
 
-- Visual: Describe ONE continuous visual moment in a single paragraph favoring: Subject + Action + Scene/Context + Camera + Lens + Lighting + Mood + Audio. Enforce ONE dominant action in the clip (no compound or teleporting motion, no transitions within the Visual). Describe tight, physically continuous motion that fits the selected duration (no visual jumps).
+- Visual: Describe ONE continuous visual moment in a single paragraph favoring: Subject + Action + Scene/Context + Camera + Lens + Lighting + Mood + Audio.
+  - SINGLE DOMINANT ACTION: Enforce exactly ONE dominant continuous action or moment in the clip (no compound or teleporting motion, no transitions, and no listing of multiple simultaneous activities).
+  - LENGTH: Target a length of 60 to 75 words (strictly between 40 and 80 words).
+  - METADATA EXCLUSION: Do NOT write any meta-phrasing, rendering terms, camera specifications, or aesthetic words in the visual description.
+  - ABSOLUTE WORD BAN: You must NEVER output any of these specific words or their variations/plurals in the visual description field: "textures", "texture", "naturalistic", "authentic", "aesthetic", "aesthetics", "shaders", "shader", "rendering", "render", "photorealistic", "realism", "realistic", "CGI integration", "CGI", "integration", "depth of field", "bokeh", "large-format sensor", "sensor", "film grain", "grain", "lens flare", "lens flares", "fidelity", "cinematic", "documentary", "focus". This includes composite phrases such as "industrial aesthetic", "cinematic lighting", "documentary realism", "realistic textures", "depth of field", "large-format sensor", "photorealistic cgi", "focus". You must translate these concepts into raw visible things (e.g., write "weathered steel and peeling paint" instead of "industrial aesthetic" or "textures").
+  ${environmentalRealismRule}
+  - CONTEXT OVERRIDE: If the PROJECT CONTEXT, Visual Style, or Style Lock Guidelines contain any of the banned terms listed in the ABSOLUTE WORD BAN, you MUST ignore those specific terms and translate them into concrete visible elements instead. Do not copy them, their synonyms, or related meta-jargon into the Visual field.
   - BASE FOOTAGE ONLY: Describe ONLY the physical photorealistic scene or primary animated footage. NEVER instruct CGI overlays, infographics, HUDs, scale-comparison graphics (e.g., do NOT describe "CGI integration of multiple football fields" or "overlay showing data"), or screen overlays; those are added in post-production.
-  - The output video must have a ${aspectRatio} aspect ratio.${aspectRatio === '9:16' ? ' For vertical 9:16 framing, ensure the subject is centered and action is vertically framed.' : ''} Length must be between 40 and 80 words.
+  - The output video must have a ${aspectRatio} aspect ratio.${aspectRatio === '9:16' ? ' For vertical 9:16 framing, ensure the subject is centered and action is vertically framed.' : ''}
 
-- Shot: Detailed description of the framing (e.g. "tight frame on the protagonist's eyes, revealing doubt"). Do not repeat the category name itself in this field, describe the visual framing detail.
+  ${shotCompositionRule}
 
 - shot_type: Must be exactly one of: establishing, wide, medium, close_up, extreme_close_up, aerial, pov, over_shoulder, insert.
 
@@ -120,9 +143,11 @@ DYNAMIC ADAPTATION RULES (NON-NEGOTIABLE):
 
 VISUAL field:
 - Always reflect the project topic and apply visual_style.
-- All veo_style_tokens must appear naturally in the visual description.
+- All veo_style_tokens must appear naturally in the visual description, EXCEPT for any forbidden/rendering/aesthetic terms listed in the ABSOLUTE WORD BAN. You MUST ignore those specific style tokens and describe the raw visible scene instead.
 - Numbers: write ALL numbers as words (e.g. "thirty-five" not "35").
 - Forbid vague/invisible descriptors: do NOT use "imperceptibly", "subtly", "seamless", "complex", "profound", or "dynamic data". You must describe concrete visible changes (e.g. "fuel surface visibly lowers", "waterline reveals a band of hull paint", "gauge needle vibrates", "blue bars rise/fall").
+${adjectiveVarietyRule}
+- Absolute Word Ban: Do NOT use any banned words or camera parameters in the visual description under any circumstances.
 - For screens, consoles, and interfaces, ensure there is no text or numbers; use abstract/symbolic graphics only — no readable UI labels. Do not describe text as "blurred" or "unreadable" — specify that there is no text or numbers, only abstract shapes and symbols.
 
 LENS field:
