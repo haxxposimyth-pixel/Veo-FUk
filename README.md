@@ -21,7 +21,7 @@ VVS Studio coordinates multiple specialized AI agents to construct your producti
 - **Hook Scorer Agent**: Evaluates the initial hook and enforces quality gates with an interactive AI-assisted rewrite cycle.
 - **Story Analyzer Agent**: Predicts viewer retention curves and emotional arcs phase-by-phase.
 - **Scene Decomposer Agent**: Translates script phases into granular storyboard-ready scenes with visual state snapshots.
-- **Veo Prompt Agent**: Compiles technical prompt parameter cards (visuals, shots, lens, lighting, camera actions, and audio) formatted specifically for video generation.
+- **Veo Prompt Agent**: Compiles technical prompt parameter cards (visuals, shots, lens, lighting, camera actions, and audio) formatted specifically for video generation. Implements strict realism guardrails, a 40–80 word visual budget with a single condense-retry, and physical spatial depth layering (foreground, midground, background) in the shot field without rendering/camera jargon.
 
 ### 2. Comprehensive Production Bible & World-Building
 - **Appearance Lock Panel**: Lock character parameters (ethnicity, age, gender, hair, eyes, clothing, clothing era) so they remain consistent across all script phases.
