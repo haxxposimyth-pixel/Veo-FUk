@@ -189,7 +189,7 @@ RULES (non-negotiable):
    - film_stock_grade  : e.g. "Kodak Vision3 5219 / 500T" (or "N/A" for stylized/animation)
    - lens_family       : e.g. "Panavision C-Series Anamorphic Primes" (or "Virtual camera" for stylized/animation)
    - time_of_day_lighting : a map for morning, afternoon, evening, night. Each must specify:
-        * color_temperature_kelvin: written as words (e.g., "four-thousand-five-hundred Kelvin", always English words, e.g. 'four-thousand-five-hundred Kelvin', never translated)
+        * color_temperature_kelvin: numeric value with unit, e.g. "4500K" (digits, never spelled out as words, never translated)
         * sun_position: sun angle / position (e.g., "low sun in the east")
         * shadow_quality: (e.g., "long, soft, warm-edged shadows")
         * ambient_palette: 2-3 colors representing the environment light

@@ -271,7 +271,8 @@ export const getVeoUserPrompt = (
   emotionalArcContext?: string,
   shotDiversityConstraint?: string,
   profile?: ContentProfileConfig,
-  assignedConstraints?: { cameraMove: string; shotSize: string }
+  assignedConstraints?: { cameraMove: string; shotSize: string },
+  sceneTimeOfDay?: string
 ): string => {
   let prompt = `Generate the Veo prompt configuration for the following scene. Note that all IDs have been fully resolved to their descriptions:
 
@@ -361,6 +362,11 @@ ${creatureList || '  None'}
     prompt += `\n\n## ASSIGNED SHOT CONSTRAINTS (MANDATORY):
 - ASSIGNED CAMERA MOVE (MANDATORY): ${assignedConstraints.cameraMove}. The \`camera\` field MUST be this move, and the visual + action_arc MUST be written around executing this exact move. Do not substitute a different move.
 - TARGET SHOT SIZE: ${assignedConstraints.shotSize}. Use this size unless the scene context makes it physically impossible; if you must deviate, pick a size DIFFERENT from a plain wide — never collapse to wide/wide/wide.`;
+  }
+
+  if (sceneTimeOfDay) {
+    prompt += `\n\n## TIME-OF-DAY LOCK:
+This scene occurs during the ${sceneTimeOfDay}. The Visual's sun position, light quality, and any time references MUST be consistent with ${sceneTimeOfDay}. Do NOT describe a different time of day (e.g. no 'midday'/'noon'/'sunset'/'night' when the period is morning).`;
   }
 
   return prompt;

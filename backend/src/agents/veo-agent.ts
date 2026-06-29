@@ -657,12 +657,14 @@ export class VeoAgent extends BaseAgent {
     let activeCharacterIds: string[] = [];
     let currentLocationId = '';
     let parsedScene: any = null;
+    let sceneTimeOfDay: string | undefined = undefined;
     try {
       const sceneRow = db.prepare('SELECT raw_json FROM scenes WHERE project_id = ? AND phase_number = ? AND scene_number = ?').get(projectId, phaseNumber, sceneNumber) as { raw_json: string } | undefined;
       if (sceneRow) {
         parsedScene = JSON.parse(sceneRow.raw_json);
         activeCharacterIds = parsedScene.active_character_ids || parsedScene.character_ids_present || [];
         currentLocationId = parsedScene.location_id || '';
+        sceneTimeOfDay = parsedScene.visual_state_snapshot?.time_of_day || undefined;
       }
     } catch (err: any) {
       console.error(`[VeoAgent] Failed to resolve active character IDs: ${err.message}`);
@@ -834,7 +836,8 @@ The previous scene in this location used ${prevKelvin}K lighting. Your lighting 
       emotionalArcContext,
       shotDiversityConstraint,
       contentProfile,
-      assignedConstraints
+      assignedConstraints,
+      sceneTimeOfDay
     );
     // === VVS OPT FIX-1A END ===
     let fullPrompt = `${system}\n\n${user}`;
@@ -1540,7 +1543,8 @@ INSTRUCTIONS:
       const obj = (bible.object_registry || []).find((o: any) => o.id === objId || o.object_id === objId);
       if (obj && obj.is_hero_prop) {
         if (obj.visual_lock) {
-          heroPropLocks.push(`${obj.name} visual style: ${obj.visual_lock}`);
+          const cleanVisualLock = obj.visual_lock.replace(/\s*\((?:OBJ|CHAR)_\d+\)/gi, '');
+          heroPropLocks.push(`${obj.name} visual style: ${cleanVisualLock}`);
         }
         if (Array.isArray(obj.forbidden_variations)) {
           propAvoids.push(...obj.forbidden_variations);
@@ -1548,7 +1552,11 @@ INSTRUCTIONS:
       }
     }
     if (heroPropLocks.length > 0) {
-      const propLockSentence = `Prop lock: ${heroPropLocks.join('; ')}.`;
+      let joinedLocks = heroPropLocks.join('; ').trim();
+      if (joinedLocks.endsWith('.')) {
+        joinedLocks = joinedLocks.slice(0, -1);
+      }
+      const propLockSentence = `Prop lock: ${joinedLocks}.`;
       if (!data.visual.includes('Prop lock:')) {
         data.visual = `${data.visual} ${propLockSentence}`;
       }
@@ -2329,6 +2337,10 @@ INSTRUCTIONS:
           console.error(`[VeoAgent] Failed to log lighting temperature jump:`, dbErr);
         }
       }
+    }
+
+    if (data.visual) {
+      data.visual = data.visual.replace(/\.{2,}/g, '.');
     }
 
     // Assemble veo_full_prompt (Fix 5)
