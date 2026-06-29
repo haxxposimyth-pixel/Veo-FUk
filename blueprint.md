@@ -585,3 +585,34 @@ To enforce concrete, physical visual generation and prevent stylistic or technic
   - **Field Scoping**: Banned rendering jargon and aesthetic filters apply exclusively to the `visual` and `shot` fields. Dedicated fields like `lens` ([veo.prompt.ts:L155](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/veo.prompt.ts#L155)), `lighting` ([veo.prompt.ts:L160-L163](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/veo.prompt.ts#L160-L163)), and the programmatic `lookStr` in [veo-agent.ts:L1695](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/veo-agent.ts#L1695) deliberately use terms like "depth of field", "high dynamic range", and "cinematic color grading" to establish technical render parameters.
   - **Editorial Verbs**: Verbs expressing camera intent (e.g., *emphasizing*, *conveying*, *highlighting*) are not programmatically guarded yet in the LLM generation stage.
   - **Lighting Overlap**: Scene lighting details can repeat when consecutive scenes map to the same location and time-of-day.
+
+### 8.7 Movie / Cinematic Series Mode
+The application implements a specialized Movie / Cinematic Series mode to generate high-production episodic or film content:
+* **Integration Seam**: Registered as the `cinematic_series` Content Profile in [content-profile.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/utils/content-profile.ts). It maps to the existing `'narrative'` `content_type` in `PROFILE_TYPE_COHERENCE_MATRIX`. No parallel content mode or database structural changes were introduced for execution state.
+* **Database & Data Model**:
+  - The `projects` table includes a nullable `movie_config` column added via migration `016_cinematic_mode.sql` (rendered safe/idempotent via a PRAGMA table_info check in [runner.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/db/migrations/runner.ts)).
+  - The `MovieConfig` type shape (format, genre, tone, story_engine_focus, season/episode numbers, and optional seed ideas: hero, villain, world, creature) is declared in [project.types.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/types/project.types.ts) and mirrored in Zod schemas in [project.schema.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/schemas/project.schema.ts).
+  - Legacy/documentary projects remain backward-compatible and unaffected.
+* **Per-Agent Pipeline Branching**:
+  - Gated entirely on `content_profile === 'cinematic_series'`. Non-cinematic runs remain byte-identical (zero drift).
+  - **Concept / Story Planner**: Generates a Cinematic Story Plan using `cinematic_series` prompts. It grounds estimated runtime and scene count to `target_duration_minutes` (e.g. ~1.5 scenes per minute).
+  - **Production Bible**: Establishes a Creature/Monster Registry under `raw_json.creature_registry` and dual-syncs registered creatures into the `character_roster` with `appearance_lock.character_type = 'creature'`. It also defines world/location locks and weapon/artifact locks.
+  - **Script Pipeline**: Uses screenplay formatting (dialogue blocks, action/combat beats) instead of viral narrative. Script gates (hook-scorer, story-analyzer, and rehook validation) are adapted to grade cinematic tension and cliffhangers instead of scroll-stop power.
+  - **Scene Decomposition**: Employs cinematic pacing rules, outputting optional visual snapshot variables.
+* **Continuity State**:
+  - The `visual_state_snapshot` schema in [agent.schema.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/shared/src/schemas/agent.schema.ts) is extended with optional fields: `character_damage` (injuries), `costume_armor_state` (wear/tear), `creature_states` (status/active powers), and `environmental_destruction` (rubble/debris).
+  - The `ContinuityAgent` ([continuity-agent.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/continuity-agent.ts)) checks for:
+    - *Creature Drift*: Size/powers violating the bible lock.
+    - *Defeated Creature Reappears*: Defeated/dead creatures appearing active.
+    - *Injury/Costume/Destruction Discontinuity*: Character injuries or clothing wear healing/regressing, or debris disappearing.
+  - The auto-fix flow corrects these warnings by passing snapshots and registries to the LLM.
+* **Veo Prompter & Realism Reconciliation**:
+  - Documentary realism adjective stripping (R1), environmental bans (R2), and composition depth rules (R3) remain documentary-gated.
+  - Cinematic mode preserves cinematic/stylistic vocabulary (e.g., "epic", "dramatic", "cinematic", "lens flare") in prompt descriptions and appends copyright-safe negative prompts to the avoid list.
+* **Originality Guardrails**:
+  - A shared constraint `COPYRIGHT_SAFE_ORIGINALITY` in [originality.constraint.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/prompts/originality.constraint.ts) bans copyrighted/franchise characters, monsters, or designs, injecting this across all pipeline agent prompts.
+* **Metadata & Export Support**:
+  - Title/Metadata Agent ([title-metadata-agent.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/agents/title-metadata-agent.ts)) generates episodic title variants (series title + season/episode + episode title), loglines, and credit blocks.
+  - Export Service ([export.service.ts](file:///c:/Users/Admin/Desktop/YT_Prompt.ai/backend/src/services/export.service.ts)) formats Markdown and plain text exports screenplay-style and appends a `PRODUCTION REGISTRIES` section (creature/monster, location, weapon, character).
+* **Known Pipeline Limitations**:
+  - **Export Format**: A dedicated `cinematic_package` format was deferred because it requires frontend/UI plumbing to expose it to the user.

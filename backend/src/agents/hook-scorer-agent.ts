@@ -36,12 +36,46 @@ export class HookScorerAgent extends BaseAgent {
     }
     const profile = resolveContentProfile(profileKey);
 
-    const objective = config?.scoringObjective || profile.scoringObjective;
-    const criteriaPrompts = profile.hookCriteria
-      .map((c, idx) => `${idx + 1}. ${c.key}: ${c.prompt}`)
-      .join('\n');
+    let prompt = '';
+    if (profileKey === 'cinematic_series') {
+      prompt = `You are an episodic cinematic showrunner evaluating the cold open, cliffhanger intensity, and immediate narrative/character stakes of this script opening. Score based on dramatic impact, tension building, and episodic draw.
 
-    const prompt = `${objective}
+1. pattern_interrupt: Inciting Incident / Hook - Does the opening immediately pull the audience into a high-stakes cinematic incident, intense character dynamic, or jarring visual conflict?
+2. stakes_clarity: Cinematic Stakes - Are the immediate life-or-death, emotional, or narrative stakes established within the opening moments?
+3. curiosity_gap: Narrative Hook / Cliffhanger - Is there a compelling micro-cliffhanger or central question established to sustain episodic viewer retention?
+4. scroll_stop_power: Cinematic Grip - Does the opening narration and action bypass exposition to instantly grip the audience and hook them into the scene?
+
+Add a new check:
+5. hard_stop_violated (boolean): Set this to true if the opening contains excessive backstory, info-dumping, or breaks the dramatic flow. Set to false if it strictly stays in the moment, maintaining tension and dramatic focus.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "pattern_interrupt": number,
+  "stakes_clarity": number,
+  "curiosity_gap": number,
+  "scroll_stop_power": number,
+  "hard_stop_violated": boolean,
+  "overall": number,
+  "feedback": "string",
+  "suggestions": ["string"]
+}
+
+Scoring Rules:
+- overall = average of all 4 scores (pattern_interrupt, stakes_clarity, curiosity_gap, scroll_stop_power) rounded to 1 decimal.
+- If hard_stop_violated is true, you MUST cap the overall score at 5.0 regardless of other scores, and you MUST add the suggestion: 'Opening contains excessive backstory or breaks the dramatic flow.' to the suggestions array.
+- suggestions = array of 2–3 specific rewrite suggestions if overall < ${profile.hookThreshold}, else empty array.
+
+Here is the Phase 1 script hook to score:
+"""
+${narrationText}
+"""`;
+    } else {
+      const objective = config?.scoringObjective || profile.scoringObjective;
+      const criteriaPrompts = profile.hookCriteria
+        .map((c, idx) => `${idx + 1}. ${c.key}: ${c.prompt}`)
+        .join('\n');
+
+      prompt = `${objective}
 ${criteriaPrompts}
 
 Add a new check:
@@ -68,6 +102,7 @@ Here is the Phase 1 script hook to score:
 """
 ${narrationText}
 """`;
+    }
 
     const result = await this.generateStructured<LocalHookScore>(
       projectId,
@@ -85,7 +120,9 @@ ${narrationText}
       if (result.overall > 5.0) {
         result.overall = 5.0;
       }
-      const suggestion = 'Hook continues past the curiosity gap question. Everything after the question must be deleted.';
+      const suggestion = profileKey === 'cinematic_series'
+        ? 'Opening contains excessive backstory or breaks the dramatic flow.'
+        : 'Hook continues past the curiosity gap question. Everything after the question must be deleted.';
       if (!result.suggestions.includes(suggestion)) {
         result.suggestions.push(suggestion);
       }
@@ -145,7 +182,9 @@ ${narrationText}
 
       // Merge and deduplicate suggestions
       const mergedSuggestions = Array.from(new Set(runs.flatMap(r => r.suggestions)));
-      const hardStopSuggestion = 'Hook continues past the curiosity gap question. Everything after the question must be deleted.';
+      const hardStopSuggestion = profileKey === 'cinematic_series'
+        ? 'Opening contains excessive backstory or breaks the dramatic flow.'
+        : 'Hook continues past the curiosity gap question. Everything after the question must be deleted.';
       if (hard_stop_violated && !mergedSuggestions.includes(hardStopSuggestion)) {
         mergedSuggestions.push(hardStopSuggestion);
       }

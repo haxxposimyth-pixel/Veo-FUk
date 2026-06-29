@@ -508,7 +508,7 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
     let spine: any = { title: topic, phases: [] };
 
     if (plan.phaseCount <= 12) {
-      const systemPrompt = applySystemPromptModifications(getScriptSystemPrompt(toneDirectives, audienceDirectives, narrationLanguage));
+      const systemPrompt = applySystemPromptModifications(getScriptSystemPrompt(toneDirectives, audienceDirectives, narrationLanguage, profile.id));
       const spinePromptRaw = getNarrationSpinePrompt(
         topic,
         bible,
@@ -522,7 +522,8 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
           target_audience: resolvedAudience
         },
         plan,
-        youtubeTranscript
+        youtubeTranscript,
+        profile.id
       );
       const spinePrompt = applySystemPromptModifications(spinePromptRaw);
 
@@ -549,7 +550,11 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
         const hookPhase = spine.phases.find((p: any) => p.phase_number === 1);
         if (resolvedHookRegen === 'on' && hookPhase && hookPhase.viral_hook_rating < HOOK_MIN) {
           spineViolations = true;
-          feedback += `- The Hook (Phase 1) viral_hook_rating is ${hookPhase.viral_hook_rating}, which is below the minimum threshold of ${HOOK_MIN}. It needs to be more engaging (stronger contradiction, specific stakes with numbers/names, single specific curiosity gap question).\n`;
+          if (profile.id === 'cinematic_series') {
+            feedback += `- The Cinematic Hook/Cold Open (Phase 1) engagement rating is ${hookPhase.viral_hook_rating}, which is below the minimum threshold of ${HOOK_MIN}. It needs to have more immediate dramatic tension, clearer character/creature stakes, or a stronger cliffhanger setup.\n`;
+          } else {
+            feedback += `- The Hook (Phase 1) viral_hook_rating is ${hookPhase.viral_hook_rating}, which is below the minimum threshold of ${HOOK_MIN}. It needs to be more engaging (stronger contradiction, specific stakes with numbers/names, single specific curiosity gap question).\n`;
+          }
         }
 
         for (const p of spine.phases) {
@@ -609,13 +614,13 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
     } else {
       // Chunked path:
       // 1. STAGE A1 — Outline
-      const outlineSystemPrompt = applySystemPromptModifications(getScriptSystemPrompt(toneDirectives, audienceDirectives, narrationLanguage));
+      const outlineSystemPrompt = applySystemPromptModifications(getScriptSystemPrompt(toneDirectives, audienceDirectives, narrationLanguage, profile.id));
       const outlinePrompt = getOutlinePrompt(plan, topic, bible, narrationLanguage, toneDirectives, audienceDirectives, {
         hook_regenerate: resolvedHookRegen,
         pre_climax_spike: resolvedPreClimaxSpike,
         long_open_loop: resolvedLongOpenLoop,
         target_audience: resolvedAudience
-      });
+      }, profile.id);
       
       onChunk?.(`\n--- Stage A1: Generating Coherent Narration Outline ---\n`);
       
@@ -675,13 +680,13 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
       const batchResults = await Promise.all(
         batches.map((batchNums) =>
           limit(async () => {
-            const fillSystemPrompt = applySystemPromptModifications(getScriptSystemPrompt(toneDirectives, audienceDirectives, narrationLanguage));
+            const fillSystemPrompt = applySystemPromptModifications(getScriptSystemPrompt(toneDirectives, audienceDirectives, narrationLanguage, profile.id));
             const fillPrompt = getNarrationFillPrompt(plan, fullOutline, batchNums, narrationLanguage, toneDirectives, audienceDirectives, {
               hook_regenerate: resolvedHookRegen,
               pre_climax_spike: resolvedPreClimaxSpike,
               long_open_loop: resolvedLongOpenLoop,
               target_audience: resolvedAudience
-            });
+            }, profile.id);
             
             logger.info(`[ScriptAgent] Generating batch of narration for phases: ${batchNums.join(', ')}`);
             
@@ -771,7 +776,7 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
     const expansions = await Promise.all(
       spine.phases.map((p: any) =>
         limit(async () => {
-          const expansionPrompt = getPhaseExpansionPrompt(p, allPhaseSummaries, bibleContextBlock, narrationLanguage);
+          const expansionPrompt = getPhaseExpansionPrompt(p, allPhaseSummaries, bibleContextBlock, narrationLanguage, profile.id);
           
           try {
             // We pass 'gemini-2.5-flash' model name here explicitly
@@ -937,7 +942,8 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
       openLoopRole,
       audienceDirectives,
       narrationLanguage,
-      plan.rehookPhases
+      plan.rehookPhases,
+      project?.content_profile
     );
     prompt = prompt.replace(/\r\n/g, '\n');
 
@@ -1035,10 +1041,21 @@ Phase content: ${p.narration_text || ''}`;
     apiKey: string | undefined,
     modelName?: string
   ): Promise<{ validated: boolean; detected_type: string; reason: string }> {
-    const prompt = `Does the following narration contain a clear re-engagement beat (new question, revelation, stakes escalation, or pattern interrupt) within its first 2 sentences? Reply only with JSON: { "validated": boolean, "detected_type": string, "reason": string }
+    const project = ProjectRepository.findById(projectId);
+    const isCinematic = project?.content_profile === 'cinematic_series';
+
+    let prompt = '';
+    if (isCinematic) {
+      prompt = `Does the following cinematic narration or scene description build/carry over a dramatic cliffhanger, narrative question, tension escalation, or creature/character revelation? Reply only with JSON: { "validated": boolean, "detected_type": string, "reason": string }
 
 Narration:
 "${narrationText}"`;
+    } else {
+      prompt = `Does the following narration contain a clear re-engagement beat (new question, revelation, stakes escalation, or pattern interrupt) within its first 2 sentences? Reply only with JSON: { "validated": boolean, "detected_type": string, "reason": string }
+
+Narration:
+"${narrationText}"`;
+    }
 
     return this.generateStructured<z.infer<typeof validateRehookSchema>>(
       projectId,

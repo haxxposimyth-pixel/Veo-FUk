@@ -124,6 +124,13 @@ export function runMigrations(): void {
       console.log('  ✓ Added content_profile column to projects table');
     }
 
+    // Migration 016: Add movie_config to projects
+    const hasMovieConfig = (db.prepare("PRAGMA table_info(projects)").all() as any[]).some((col: any) => col.name === 'movie_config');
+    if (!hasMovieConfig) {
+      db.prepare("ALTER TABLE projects ADD COLUMN movie_config TEXT DEFAULT NULL").run();
+      console.log('  ✓ Added movie_config column to projects table');
+    }
+
     const hasRenderFamily = (db.prepare("PRAGMA table_info(custom_styles)").all() as any[]).some((col: any) => col.name === 'render_family');
     if (!hasRenderFamily) {
       db.prepare("ALTER TABLE custom_styles ADD COLUMN render_family TEXT").run();

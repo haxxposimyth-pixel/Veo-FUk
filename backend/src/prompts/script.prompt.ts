@@ -1,5 +1,6 @@
 import type { ProductionBibleData, PhasePlan } from 'shared';
 import { resolveLanguageRules } from 'shared';
+import { COPYRIGHT_SAFE_ORIGINALITY } from './originality.constraint';
 
 /**
  * Script Prompt Templates
@@ -8,7 +9,102 @@ import { resolveLanguageRules } from 'shared';
  * narrative script. Each phase maps to a distinct emotional beat.
  */
 
-export function getScriptSystemPrompt(toneDirectives?: string, audienceDirectives?: string, narrationLanguage: string = 'English'): string {
+export function getScriptSystemPrompt(
+  toneDirectives?: string,
+  audienceDirectives?: string,
+  narrationLanguage: string = 'English',
+  profileKey?: string
+): string {
+  if (profileKey === 'cinematic_series') {
+    const rules = resolveLanguageRules(narrationLanguage);
+    const hint = rules.narrationHint ? `\n- ${rules.narrationHint}` : '';
+    let prompt = `===== LANGUAGE (NON-NEGOTIABLE) =====
+ONLY narration_text is in the narration language. Everything else is ENGLISH.
+- narration_text → write in ${narrationLanguage}.${hint}
+- ALL OTHER fields — phase_title, phase_content, key_events, key_facts, key_images, characters_mentioned, and any other structural/visual text — MUST be written in ENGLISH (Latin script). These feed the visual pipeline (SceneAgent → Veo), which requires English. NEVER write these fields in ${narrationLanguage}.
+- The reference transcript and the examples in this prompt are TONE/STRUCTURE references ONLY; do not copy their language. narration_text follows ${narrationLanguage}; all other fields stay English.
+====================================
+
+NARRATION LENGTH RULE (NON-NEGOTIABLE):
+Each phase you generate must contain a dedicated narration 
+block of MINIMUM 120 words and MAXIMUM 360 words.
+
+This narration block is the voiceover script that will be 
+read aloud during the video. It must:
+- Be written as natural, flowing spoken sentences
+- Match the emotional tone of the phase (hook, buildup, 
+  escalation, climax, outro)
+- NOT be bullet points, headings, or stage directions
+- Be continuous prose the narrator speaks directly
+- Average 20 words per intended scene
+
+Formula: target_narration_words = intended_scene_count × 20
+Minimum intended_scene_count per phase = 6
+Therefore minimum narration = 6 × 20 = 120 words
+
+If you generate a phase with fewer than 120 words of 
+narration, you have failed this instruction. Count your 
+words before finalizing each phase.
+
+## ANTI-REPETITION RULE (MANDATORY):
+ANTI-REPETITION: Do NOT start consecutive sentences with the same word. In particular, NEVER start consecutive sentences with a character's name (e.g. do not write: "Cleopatra stands... Cleopatra surveys... Cleopatra pivots..."). Vary your subjects, pronouns, and sentence structures.
+
+${COPYRIGHT_SAFE_ORIGINALITY}
+
+=== SECTION: NARRATION VOICE (apply to ALL phases) ===
+You are writing spoken narration and scene-setting for a cinematic, story-driven production. The audience is expecting a highly engaging, immersive story with rich atmosphere, snappy dialogue, and intense action.
+VOICE RULES:
+1. Write like you are telling an epic story, with strong character perspectives and immersive atmosphere.
+2. Short sentences hit harder than long ones. Maintain a dynamic rhythm.
+3. Show, don't tell. Do not summarize or use generic clichés. Use specific details, actions, and character decisions to build tension.
+4. Focus on sensory descriptions: the crackle of energy, the low growl of a creature, the rain-slicked neon streets, the heavy silence before combat.
+5. No passive voice. Keep the actions direct and immediate.
+6. NO call-to-action (like, subscribe) or viral-style hooks/CTAs. This is a cinematic narrative experience.
+
+=== SECTION: WHAT TO NEVER WRITE (applies to ALL phases) ===
+1. Never write a sentence whose only job is to tell the viewer what the next sentence will say.
+2. Never use 'delve', 'tapestry', 'multifaceted', 'nuanced', 'realm', 'profound', 'pivotal', 'bustling', 'game-changer', 'paradigm', 'landmark', 'groundbreaking', 'testament', 'spearhead', 'beacon', 'unleash', 'supercharge', or 'journey'.
+3. Never write in lists inside narration. No 'First... Second... Third...' structures.
+4. Never tell the viewer how to feel. No 'remarkably', 'incredibly', 'fascinatingly', 'astonishingly' as sentence openers.
+5. Never write a rhetorical question that the video does not answer.
+6. Never end the script on a call to action (like and subscribe language). That is not narration — it is added separately in post.
+7. Do not repeat any noun, verb, or adjective that appeared in Phase 1 unless it is a named character or location. The vocabulary must expand as the video progresses.
+
+## CROSS-PHASE CONTINUITY RULES:
+Every phase must begin with a sentence that directly continues from or responds to the final sentence of the previous phase. Read the last sentence of the previous phase before writing the first sentence of the current phase.
+
+RULES (non-negotiable):
+1. Use ONLY character IDs (CHAR_xxx), location IDs (LOC_xxx), and object IDs (OBJ_xxx) from
+   the Production Bible in all structured JSON fields (e.g. character_ids_active, location_id_primary). Never invent new IDs.
+
+2. PHASE CONTENT FIELD:
+   Write phase_content as a natural English description of what happens visually in this phase.
+   Use character NAMES (not IDs) and location NAMES (not IDs) and object NAMES (not IDs) in this field only.
+   
+   Example — WRONG: 
+   "CHAR_001 walks into LOC_002 holding OBJ_001."
+   
+   Example — CORRECT: 
+   "Elara walks into The Wildflower Workshop holding the Handcrafted Birdhouse."
+   
+   Only phase_content uses names. The structured JSON fields (character_ids_active, location_id_primary) must still use the ID format.
+
+   COUPLING RULE: when a phase's narration names a LIST or MONTAGE of distinct concrete subjects (e.g. "coffee, phone, shoes"), phase_content MUST include an explicit visual beat for EACH named subject in the sequence. Narration and visual direction must stay coupled — the visuals must depict the concrete nouns the narration mentions, not just the overall topic.
+
+3. narration_text is the dedicated raw voiceover narration block. Write it in ${narrationLanguage} (see the LANGUAGE NON-NEGOTIABLE block above). Make it vivid, cinematic, and optimised.
+
+4. viral_hook_rating (1–10): Score this based on cinematic engagement, stakes clarity, and cliffhanger intensity.
+
+5. Return ONLY raw JSON — no markdown fences, no prose before or after.`;
+
+    if (toneDirectives) {
+      prompt += `\n\n## TONE DIRECTIVES\n${toneDirectives}`;
+    }
+    if (audienceDirectives) {
+      prompt += `\n\n## AUDIENCE DIRECTIVES\n${audienceDirectives}`;
+    }
+    return prompt.trim();
+  }
   const rules = resolveLanguageRules(narrationLanguage);
   const hint = rules.narrationHint ? `\n- ${rules.narrationHint}` : '';
   let prompt = `===== LANGUAGE (NON-NEGOTIABLE) =====
@@ -161,10 +257,69 @@ export function getPhaseRegeneratePrompt(
   openLoopRole?: 'plant' | 'payoff' | 'none',
   audienceDirectives?: string,
   narrationLanguage: string = 'English',
-  rehookPhases: number[] = [4, 6, 8]
+  rehookPhases: number[] = [4, 6, 8],
+  profileKey?: string
 ): string {
   const rules = resolveLanguageRules(narrationLanguage);
   const hint = rules.narrationHint ? `\n- ${rules.narrationHint}` : '';
+
+  if (profileKey === 'cinematic_series') {
+    let prompt = `===== LANGUAGE (NON-NEGOTIABLE) =====
+ONLY narration_text is in the narration language. Everything else is ENGLISH.
+- narration_text → write in ${narrationLanguage}.${hint}
+- ALL OTHER fields — phase_title, phase_content, key_events, key_facts, key_images, characters_mentioned, and any other structural/visual text — MUST be written in ENGLISH (Latin script). NEVER write these fields in ${narrationLanguage}.
+====================================
+
+You are a script doctor. Rewrite Phase ${phaseNumber}: "${phaseTitle}" to be a highly engaging, immersive cinematic narrative phase.
+
+Topic: "${topic}"
+Production Bible Details:
+Characters: ${JSON.stringify(bible.character_roster)}
+Locations: ${JSON.stringify(bible.location_roster)}
+Visual Style Lock: ${JSON.stringify(bible.visual_style_lock)}
+
+Current content (rewrite this):
+"${currentContent}"`;
+
+    if (allPhases) {
+      const preceding = allPhases.find(p => p.phase_number === phaseNumber - 1);
+      if (preceding) {
+        const lastSentences = getLastSentences(preceding.narration_text ?? '', 2);
+        prompt += `\n\nPREVIOUS_PHASE_CONTEXT:\nPhase ${preceding.phase_number} (${preceding.phase_type}): "${preceding.phase_title}"\nContent: ${preceding.phase_content}\nNarration (last 2 sentences): ${lastSentences}`;
+      }
+
+      const following = allPhases.find(p => p.phase_number === phaseNumber + 1);
+      if (following) {
+        prompt += `\n\nNEXT_PHASE_CONTEXT:\nPhase ${following.phase_number} (${following.phase_type}): "${following.phase_title}"\nContent: ${following.phase_content}\nNarration: ${following.narration_text ?? ''}`;
+      }
+
+      const overviewLines = allPhases
+        .filter(p => p.phase_number !== phaseNumber && p.phase_number !== phaseNumber - 1 && p.phase_number !== phaseNumber + 1)
+        .map(p => `- Phase ${p.phase_number} (${p.phase_type}): "${p.phase_title}"`)
+        .join('\n');
+      prompt += `\n\nSCRIPT_OVERVIEW:\n${overviewLines}`;
+    }
+
+    if (feedback && feedback.trim().length > 0) {
+      prompt += `\n\nSpecific Critique & Instructions to apply:\n"${feedback}"`;
+    }
+
+    if (toneDirectives) {
+      prompt += `\n\n## TONE DIRECTIVES\n${toneDirectives}`;
+    }
+    if (audienceDirectives) {
+      prompt += `\n\n## AUDIENCE DIRECTIVES\n${audienceDirectives}`;
+    }
+
+    prompt += `\n\nRequirements:
+1. Write the narration_text to be a highly engaging, immersive cinematic sequence. Focus on screenplay dialogue, tense atmosphere, action/combat beats, and character dynamics. No viral-style hooks or CTAs.
+2. If this is Phase 1, ensure it introduces Vance, the setting, and the threat immediately, ending on a cliffhanger.
+3. If this is a rehook/cliffhanger phase (${rehookPhases.join(', ')}), ensure it builds/carries over high stakes or suspense.
+4. narration_text MUST contain a minimum of 120 words (60 if Phase 1) and a maximum of 360 words.
+
+Return ONLY valid JSON matching the same structure.`;
+    return prompt;
+  }
   let prompt = `===== LANGUAGE (NON-NEGOTIABLE) =====
 ONLY narration_text is in the narration language. Everything else is ENGLISH.
 - narration_text → write in ${narrationLanguage}.${hint}
@@ -692,11 +847,90 @@ export function getNarrationSpinePrompt(
     target_audience: 'gen_z' | 'millennial' | 'gen_x' | 'general';
   },
   plan: PhasePlan,
-  fullTranscript?: string | null
+  fullTranscript?: string | null,
+  profileKey?: string
 ): string {
   const layoutItems = plan.layout.map(p => {
     return `${p.phase_number}. phase_number: ${p.phase_number}, phase_type: "${p.phase_type}"`;
   }).join('\n');
+
+  if (profileKey === 'cinematic_series') {
+    const rules = resolveLanguageRules(narrationLanguage);
+    const hint = rules.narrationHint ? `\n- ${rules.narrationHint}` : '';
+    let prompt = `===== LANGUAGE (NON-NEGOTIABLE) =====
+ONLY narration_text is in the narration language. Everything else is ENGLISH.
+- narration_text → write in ${narrationLanguage}.${hint}
+- ALL OTHER fields — title, phase_title, phase_type, rehook_type, open_loop_role — MUST be written in ENGLISH (Latin script). NEVER write these fields in ${narrationLanguage}.
+- The reference transcript and the examples in this prompt are TONE/STRUCTURE references ONLY; do not copy their language. narration_text follows ${narrationLanguage}; all other fields stay English.
+====================================
+
+You are the Script Spine Generator for a cinematic, episodic story-driven series.
+Your goal is to write all ${plan.phaseCount} phases of narration text (screenplay dialog, action beats, suspenseful narrations) as a single flowing cinematic story.
+
+Topic: "${topic}"
+
+## BIBLE DOSSIERS FOR REFERENCES
+Characters: ${JSON.stringify(bible.character_roster)}
+Locations: ${JSON.stringify(bible.location_roster)}
+Visual Style Lock: ${JSON.stringify(bible.visual_style_lock)}
+
+## TONE DIRECTIVES
+${toneDirectives}
+
+## AUDIENCE DIRECTIVES
+${audienceDirectives}
+
+## FIXED ${plan.phaseCount}-PHASE LAYOUT & STRUCTURE
+The script must have exactly ${plan.phaseCount} phases, generated in order (phase_number 1 to ${plan.phaseCount}):
+${layoutItems}
+
+## NARRATION LENGTH TARGETS (NON-NEGOTIABLE)
+- Phase 1 (Hook / Cold Open): 60 to 90 words. Keep it extremely tight and punchy.
+- Phases 2-${plan.phaseCount}: Each phase's narration_text MUST contain a minimum of ${plan.wordsPerPhase >= 120 ? 120 : 60} words and a maximum of 360 words (target ${plan.wordsPerPhase} words per phase).
+Failure to meet these word counts violates the schema constraints. Count words carefully.
+
+## CROSS-PHASE CONTINUITY & ANTI-REPETITION
+- Write the narrations sequentially so they form one seamless narrative arc following the cinematic progression.
+- Avoid any viral-style transitions or summary recaps. Let the actions of the characters, the threat of the creatures, and the plot events drive the momentum.
+- Anti-repetition: Do NOT repeat facts, images, or examples across different phases.
+- Do NOT start consecutive sentences with the same word. Never start consecutive sentences with a character's name.
+
+## CINEMATIC ENGAGEMENT RULES:
+1. PHASE 1 HOOK / COLD OPEN:
+   - Introduce Vance and the world immediately. Introduce the menacing threat (e.g. creatures from creature_registry). Set up life-or-death/high-stakes tension right away. Do NOT use viral hooks or call-to-actions.
+   - Establish a compelling micro-cliffhanger or central question at the end of Phase 1 to sustain episodic viewer retention.
+2. LONG OPEN LOOP (when long_open_loop is on):
+   - Plant a narrative open loop (mystery or threat) in Phase ${plan.plantPhase} (set open_loop_role to "plant").
+   - Resolve or pay off this narrative loop in Phase ${plan.payoffPhase} (Climax) (set open_loop_role to "payoff").
+3. RE-HOOKS / CLIFFHANGERS (Phases ${plan.rehookPhases.join(', ')}):
+   - These phases must build or carry over a dramatic cliffhanger, narrative question, tension escalation, or creature/character revelation to sustain viewer tension across phases.
+   - Assign a DISTINCT rehook_type to each of these phases from: ['new_question', 'revelation', 'stakes_escalation', 'pattern_interrupt']. No duplicate rehook types.
+4. PRE-CLIMAX SPIKE (when pre_climax_spike is on):
+   - Since pre_climax_spike is '${settings.pre_climax_spike}', Phase ${plan.preClimaxSpikePhase} must end on a maximum-tension cliffhanger beat (set rehook_type to "pre_climax_spike").
+5. VIRAL HOOK RATING (Cinematic Engagement Rating):
+   - Self-score each phase's engagement quality (1-10) based on dramatic impact, stakes clarity, and tension building.
+
+## STRICT OUTPUT JSON STRUCTURE:
+Output a single JSON object matching the scriptSpineOutputSchema. Do NOT include markdown fences, prose, or extra keys.
+{
+  "title": "string",
+  "phases": [
+    {
+      "phase_number": number,
+      "phase_type": "hook" | "build_up" | "escalation" | "climax" | "outro",
+      "phase_title": "string (ENGLISH)",
+      "narration_text": "string (TARGET LANGUAGE)",
+      "viral_hook_rating": number,
+      "rehook_type": "new_question" | "revelation" | "stakes_escalation" | "pattern_interrupt" | "pre_climax_spike" | null,
+      "open_loop_role": "plant" | "payoff" | "none"
+    }
+  ]
+}`;
+    if (fullTranscript && fullTranscript.trim().length > 0) {
+      prompt += `\n\nYouTube Transcript Reference:\n"${fullTranscript}"\n\nUse the provided transcript as a TONE and VOCABULARY structure reference only — do NOT adopt its language; narrate in ${narrationLanguage}.`;
+    }
+    return prompt.trim();
+  }
 
   const rules = resolveLanguageRules(narrationLanguage);
   const hint = rules.narrationHint ? `\n- ${rules.narrationHint}` : '';
@@ -793,8 +1027,68 @@ export function getPhaseExpansionPrompt(
   },
   allPhaseSummaries: string,
   bibleContextBlock: string,
-  narrationLanguage: string
+  narrationLanguage: string,
+  profileKey?: string
 ): string {
+  if (profileKey === 'cinematic_series') {
+    return `===== LANGUAGE (NON-NEGOTIABLE) =====
+EVERY field generated in this JSON response MUST be written in ENGLISH (Latin script).
+- phase_content → write in ENGLISH.
+- key_events, key_facts, key_images → write in ENGLISH.
+- characters_mentioned → write in ENGLISH.
+- location_id_primary → write in ENGLISH.
+NEVER write any field in ${narrationLanguage} or any other language than English.
+====================================
+
+You are the Script Phase Expander for a cinematic, episodic story-driven series. Your job is to generate the English visual/structural metadata for a single script phase.
+
+## BIBLE DOSSIERS & CONTEXT
+${bibleContextBlock}
+
+## CURRENT PHASE TO EXPAND
+Phase Number: ${phase.phase_number}
+Phase Type: ${phase.phase_type}
+Phase Title: "${phase.phase_title}"
+Narration Text (Spoken voiceover, read-only):
+"${phase.narration_text}"
+
+## ALL SCRIPT PHASES (READ-ONLY FOR DE-DUPLICATION)
+${allPhaseSummaries}
+
+${COPYRIGHT_SAFE_ORIGINALITY}
+
+INSTRUCTIONS:
+1. Analyze the narration text for this phase.
+2. phase_content: Write a detailed description of what happens visually in this phase.
+   - Ground the visuals deeply in the creature registry, location atmosphere/lighting locks, and weapon locks.
+   - Describe character acting, combat beats, creature movements, or weapon activations.
+   - Use character/creature NAMES, location NAMES, and object NAMES (not IDs) in phase_content.
+   - It must be a vivid narrative beat in ENGLISH, minimum 10 characters.
+   - COUPLING RULE: when the narration text names a list or montage of distinct concrete subjects, phase_content MUST include an explicit, detailed visual action or beat for EACH named subject in the sequence. Visuals must depict the concrete nouns the narration mentions, not just the overall topic.
+3. character_ids_active: List of character/creature IDs (e.g., "CHAR_001") present or active in this phase.
+   - They MUST exist in the Production Bible roster.
+4. location_id_primary: The primary location ID (e.g., "LOC_001") for this phase.
+   - It MUST exist in the Production Bible roster. If not, default to "LOC_001".
+5. key_facts: Array of 3-5 key dramatic points or beats made in this phase's narration. Must be written in English.
+6. key_images: Array of 2-4 vivid cinematic frames or visual details described in this phase. Must be written in English.
+7. key_events: Array of 2-4 narrative events or actions that occur in this phase. Must be written in English.
+8. characters_mentioned: Array of character/creature names referenced or appearing in this phase. Must be written in English.
+
+STRICT DE-DUPLICATION:
+Do NOT duplicate facts, images, or events that are already covered or summarized in other phases (refer to the "ALL SCRIPT PHASES" read-only block). Focus only on what is unique and distinct in this phase's narration.
+
+STRICT JSON OUTPUT FORMAT:
+Output ONLY a raw JSON object matching the following schema. No markdown fences, no text before/after.
+{
+  "phase_content": "string (ENGLISH)",
+  "key_events": ["string (ENGLISH)"],
+  "key_facts": ["string (ENGLISH)"],
+  "key_images": ["string (ENGLISH)"],
+  "character_ids_active": ["CHAR_xxx"],
+  "characters_mentioned": ["string (ENGLISH)"],
+  "location_id_primary": "LOC_xxx"
+}`;
+  }
   return `===== LANGUAGE (NON-NEGOTIABLE) =====
 EVERY field generated in this JSON response MUST be written in ENGLISH (Latin script).
 - phase_content → write in ENGLISH.
@@ -862,11 +1156,71 @@ export function getOutlinePrompt(
     pre_climax_spike: 'on' | 'off';
     long_open_loop: 'on' | 'off';
     target_audience: 'gen_z' | 'millennial' | 'gen_x' | 'general';
-  }
+  },
+  profileKey?: string
 ): string {
   const layoutItems = plan.layout.map(p => {
     return `${p.phase_number}. phase_number: ${p.phase_number}, phase_type: "${p.phase_type}"`;
   }).join('\n');
+
+  if (profileKey === 'cinematic_series') {
+    return `===== LANGUAGE (NON-NEGOTIABLE) =====
+ALL fields in the outline — title, phase_title, phase_type, beat_intent, rehook_type, open_loop_role — MUST be written in ENGLISH (Latin script).
+====================================
+
+You are the Script Outline Planner for a cinematic, episodic story-driven series.
+Your goal is to design a detailed, highly cohesive script outline of exactly ${plan.phaseCount} phases for:
+Topic: "${topic}"
+
+## BIBLE DOSSIERS FOR REFERENCES
+Characters: ${JSON.stringify(bible.character_roster)}
+Locations: ${JSON.stringify(bible.location_roster)}
+Visual Style Lock: ${JSON.stringify(bible.visual_style_lock)}
+
+## TONE DIRECTIVES
+${toneDirectives}
+
+## AUDIENCE DIRECTIVES
+${audienceDirectives}
+
+## FIXED ${plan.phaseCount}-PHASE LAYOUT & STRUCTURE
+The outline must have exactly ${plan.phaseCount} phases, in this order:
+${layoutItems}
+
+## CINEMATIC ENGAGEMENT RULES:
+1. LONG OPEN LOOP (when long_open_loop is on):
+   - Plant a narrative open loop (mystery or threat) in Phase ${plan.plantPhase} (set open_loop_role to "plant").
+   - Resolve or pay off this narrative loop in Phase ${plan.payoffPhase} (Climax) (set open_loop_role to "payoff").
+2. RE-HOOKS / CLIFFHANGERS (Phases ${plan.rehookPhases.join(', ')}):
+   - These phases must build or carry over a dramatic cliffhanger, narrative question, tension escalation, or creature/character revelation to sustain viewer tension across phases.
+   - Assign a DISTINCT rehook_type to each of these phases from: ['new_question', 'revelation', 'stakes_escalation', 'pattern_interrupt']. No duplicate rehook types.
+3. PRE-CLIMAX SPIKE (when pre_climax_spike is on):
+   - Since pre_climax_spike is '${settings.pre_climax_spike}', Phase ${plan.preClimaxSpikePhase} must end on a maximum-tension cliffhanger beat (set rehook_type to "pre_climax_spike").
+
+## BEAT INTENT DESIGN
+- For each phase, write a "beat_intent" (1-2 sentences in ENGLISH) describing the core narrative event/detail (acting, combat beats, creature movements, weapon/artifact activations).
+- Each beat_intent must be unique and distinct (no repeating details, events, or facts).
+- The beats must build tension progressively toward the climax.
+- Every middle beat should end on a cliffhanger, suspenseful moment, or point of curiosity to pull the viewer to the next beat.
+
+## OUTPUT JSON:
+Output a single JSON object matching the scriptOutlineOutputSchema. Do NOT include markdown fences, prose, or extra keys.
+
+{
+  "title": "string",
+  "phases": [
+    {
+      "phase_number": number,
+      "phase_type": "hook" | "build_up" | "escalation" | "climax" | "outro",
+      "phase_title": "string (ENGLISH)",
+      "beat_intent": "string (1-2 sentences ENGLISH describing the beat, ending in cliffhanger for middle phases)",
+      "viral_hook_rating": number (1-10),
+      "rehook_type": "new_question" | "revelation" | "stakes_escalation" | "pattern_interrupt" | "pre_climax_spike" | null,
+      "open_loop_role": "plant" | "payoff" | "none"
+    }
+  ]
+}`;
+  }
 
   return `===== LANGUAGE (NON-NEGOTIABLE) =====
 ALL fields in the outline — title, phase_title, phase_type, beat_intent, rehook_type, open_loop_role — MUST be written in ENGLISH (Latin script).
@@ -950,7 +1304,8 @@ export function getNarrationFillPrompt(
     pre_climax_spike: 'on' | 'off';
     long_open_loop: 'on' | 'off';
     target_audience: 'gen_z' | 'millennial' | 'gen_x' | 'general';
-  }
+  },
+  profileKey?: string
 ): string {
   const outlineContext = fullOutline.phases.map(p => {
     return `Phase ${p.phase_number} [${p.phase_type}] — ${p.phase_title}: ${p.beat_intent} (open_loop: ${p.open_loop_role || 'none'}, rehook: ${p.rehook_type || 'none'})`;
@@ -958,6 +1313,38 @@ export function getNarrationFillPrompt(
 
   const rules = resolveLanguageRules(narrationLanguage);
   const hint = rules.narrationHint ? `\n- ${rules.narrationHint}` : '';
+
+  if (profileKey === 'cinematic_series') {
+    return `===== LANGUAGE NON-NEGOTIABLE RULES =====
+narration_text MUST be written in ${narrationLanguage}.${hint}
+- Never end or break a sentence at a comma. Ensure every narration segment flows continuously without abrupt punctuation cuts.
+- ALL other fields or JSON structure keys must be in English.
+==========================================
+
+You are the Narration Filler Agent for a cinematic, episodic story-driven series. Your task is to write the narration_text for specific script phases: [${batchPhaseNumbers.join(', ')}].
+
+Here is the COMPLETE script outline for context and global continuity:
+${outlineContext}
+
+## NARRATION TARGETS FOR THIS BATCH:
+Write narration_text ONLY for the requested phase numbers: [${batchPhaseNumbers.join(', ')}].
+
+For each of the requested phases:
+1. Hook (Phase 1) length must be 60 to 90 words. Keep it tight. Cold open style. Introduce character and threat tension immediately. No viral CTA/hooks. Establish a compelling micro-cliffhanger or central question at the end.
+2. Other Phases (Phase 2+): narration_text MUST contain a minimum of ${plan.wordsPerPhase >= 120 ? 120 : 60} words and a maximum of 360 words (target ${plan.wordsPerPhase} words per phase).
+3. Deliver the specific open_loop or rehook/cliffhanger requirements indicated in the outline for that phase.
+4. Ensure narration flows seamlessly from the preceding phase and leads into the next phase.
+
+Output a single JSON matching this structure:
+{
+  "phases": [
+    {
+      "phase_number": number,
+      "narration_text": "string in ${narrationLanguage}"
+    }
+  ]
+}`;
+  }
   return `===== LANGUAGE NON-NEGOTIABLE RULES =====
 narration_text MUST be written in ${narrationLanguage}.${hint}
 - Never end or break a sentence at a comma. Ensure every narration segment flows continuously without abrupt punctuation cuts.

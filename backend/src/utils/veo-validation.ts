@@ -1,26 +1,7 @@
 import logger from './logger';
-import { VeoPromptData, ProductionBible, Project, checkNarrationPurity } from 'shared';
+import { VeoPromptData, ProductionBible, Project, checkNarrationPurity, numberToWords as sharedNumberToWords, normalizeTextNumbers } from 'shared';
 
-export function numberToWords(numStr: string): string {
-  const num = parseInt(numStr, 10);
-  if (isNaN(num)) return numStr;
-  if (num === 0) return 'zero';
-
-  const ones = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
-  const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-
-  if (num < 20) return ones[num];
-  if (num < 100) {
-    return tens[Math.floor(num / 10)] + (num % 10 !== 0 ? '-' + ones[num % 10] : '');
-  }
-  if (num < 1000) {
-    const hundredPart = ones[Math.floor(num / 100)] + ' hundred';
-    const remainder = num % 100;
-    if (remainder === 0) return hundredPart;
-    return hundredPart + ' and ' + numberToWords(remainder.toString());
-  }
-  return numStr;
-}
+export const numberToWords = sharedNumberToWords;
 
 export function validatePrompt(
   prompt: VeoPromptData,
@@ -48,9 +29,10 @@ export function validatePrompt(
     errors.push(`Visual has ${visualWords.length} words (must be 40-80 words)`);
   }
 
-  // 3. Arabic numeral check in Visual
-  if (/\d/.test(prompt.visual)) {
-    prompt.visual = prompt.visual.replace(/\b(\d+)\b/g, (match: string) => numberToWords(match));
+  // 3. Normalize numbers for narration only
+  if (typeof prompt.narration === 'string') {
+    const narrationLanguage = project.narration_language || 'English';
+    prompt.narration = normalizeTextNumbers(prompt.narration, narrationLanguage);
   }
 
   // 4. Avoid list checks

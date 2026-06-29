@@ -1,4 +1,15 @@
 import type { Project, ProductionBible, Script, Phase, Scene, VeoPrompt, VideoMetadata } from 'shared';
+import { cleanTopicScaffolding } from 'shared';
+
+function sanitizeContinuityNotes(notes: string | null | undefined): string {
+  if (!notes) return '';
+  const lines = notes.split('\n');
+  const cleanLines = lines.filter(line => {
+    const lower = line.toLowerCase().trim();
+    return !lower.includes('auto-removed unregistered object:') && !lower.includes('register in production bible if needed');
+  });
+  return cleanLines.join('\n').trim();
+}
 
 export interface ExportPackage {
   project: Project;
@@ -40,8 +51,150 @@ export const ExportService = {
   exportMarkdown(pack: ExportPackage): string {
     const { project, bible, phases, scenes, prompts } = pack;
 
+    if (project.content_profile === 'cinematic_series') {
+      let md = `# Cinematic Production Package: ${project.title}\n\n`;
+      md += `**Topic:** ${cleanTopicScaffolding(project.topic)}\n`;
+      md += `**Visual Style:** ${project.visual_style}\n`;
+      md += `**Aspect Ratio:** ${project.aspect_ratio}\n`;
+      md += `**Narration Language:** ${project.narration_language}\n`;
+      md += `**Pacing Stage:** ${project.status.toUpperCase()}\n\n`;
+      md += `*Generated via Cinematic Video Studio AI*\n\n`;
+      md += `--- \n\n`;
+
+      if (bible) {
+        const bibleData = JSON.parse(bible.raw_json);
+        md += `## 1. PRODUCTION REGISTRIES\n\n`;
+
+        md += `### Creature/Monster Registry\n`;
+        const creatures = bibleData.creature_registry || [];
+        if (creatures.length > 0) {
+          creatures.forEach((c: any) => {
+            md += `- **${c.name}** (Size: ${c.size || 'N/A'}): ${c.description || c.physical_description || 'N/A'}. *Powers:* ${(c.powers || []).join(', ') || 'N/A'}\n`;
+          });
+        } else {
+          md += `*No creatures registered.*\n`;
+        }
+
+        md += `\n### World/Location Locks\n`;
+        const locations = bibleData.location_roster || [];
+        if (locations.length > 0) {
+          locations.forEach((loc: any) => {
+            md += `- **${loc.name}** (${loc.type || 'exterior'}): ${loc.atmosphere || 'N/A'}. *Visual Lock:* ${loc.visual_signature || loc.description || 'N/A'}\n`;
+          });
+        } else {
+          md += `*No locations locked.*\n`;
+        }
+
+        md += `\n### Weapon/Artifact Locks\n`;
+        const weapons = bibleData.object_registry || [];
+        if (weapons.length > 0) {
+          weapons.forEach((obj: any) => {
+            md += `- **${obj.name}**: ${obj.description || 'N/A'}. *Symbolic Significance:* ${obj.symbolic_meaning || 'N/A'}\n`;
+          });
+        } else {
+          md += `*No weapons or artifacts locked.*\n`;
+        }
+
+        md += `\n### Character Roster\n`;
+        const chars = bibleData.character_roster || [];
+        chars.forEach((char: any) => {
+          md += `- **${char.name}** (${char.role}): ${char.physical_description || char.description || 'N/A'}. *Costume Lock:* ${char.costume_description || 'N/A'}\n`;
+        });
+        md += `\n--- \n\n`;
+      }
+
+      md += `## 2. SCREENPLAY & SHOT BREAKDOWN\n\n`;
+      phases.forEach((p) => {
+        md += `### PHASE ${p.phase_number} (${p.phase_type.toUpperCase()}): ${p.phase_title.toUpperCase()}\n\n`;
+
+        const phaseScenes = scenes.filter((s) => s.phase_number === p.phase_number);
+        phaseScenes.forEach((s) => {
+          const sData = JSON.parse(s.raw_json);
+          const locationName = sData.location_id || 'LOC_001';
+          const timeOfDay = sData.visual_state_snapshot?.time_of_day?.toUpperCase() || 'N/A';
+          
+          md += `#### SCENE ${s.scene_number}: ${s.title.toUpperCase()}\n`;
+          md += `**${locationName} - ${timeOfDay}**\n\n`;
+
+          md += `${s.scene_description || sData.scene_description}\n\n`;
+
+          if (s.narration_fragment) {
+            md += `    NARRATOR / VANCE\n`;
+            md += `    (voiceover)\n`;
+            md += `    "${s.narration_fragment}"\n\n`;
+          }
+
+          if (sData.dialogue && sData.dialogue !== 'None') {
+            md += `    VANCE\n`;
+            md += `    "${sData.dialogue}"\n\n`;
+          }
+
+          const cleanNotes = sanitizeContinuityNotes(s.continuity_notes);
+          if (cleanNotes) {
+            md += `*Continuity Note: ${cleanNotes}*\n\n`;
+          }
+
+          const pObj = prompts.find((pr) => pr.phase_number === p.phase_number && pr.scene_number === s.scene_number);
+          if (pObj) {
+            const pData = JSON.parse(pObj.raw_json);
+            const globalIndex = prompts.findIndex((pr) => pr.id === pObj.id) + 1;
+            md += `*Veo Prompt Formulation:*\n`;
+            md += `> **Shot & Camera:** ${pData.shot} | ${pData.camera} | ${pData.lens}\n`;
+            md += `> **Visual Description:** ${pData.visual}\n`;
+            md += `> **Negative Avoid List:** \`${pData.avoid}\`\n\n`;
+          }
+          md += `\n`;
+        });
+      });
+
+      if (pack.metadata) {
+        const metaData = JSON.parse(pack.metadata.raw_json);
+        md += `--- \n\n`;
+        md += `## 3. Cinematic Marketing & Metadata\n\n`;
+        
+        md += `### Selected Title\n`;
+        md += `**${pack.metadata.selected_title || (metaData.titles?.[0]?.text || 'N/A')}**\n\n`;
+
+        md += `### Titles Table\n`;
+        md += `| Title | Structure Type | Length |\n`;
+        md += `| :--- | :--- | :--- |\n`;
+        metaData.titles?.forEach((t: any) => {
+          const isSelected = t.text === pack.metadata?.selected_title ? ' **(Selected)**' : '';
+          md += `| ${t.text}${isSelected} | ${t.structure_type || 'cinematic'} | ${t.char_count} |\n`;
+        });
+        md += `\n`;
+
+        md += `### Description & Logline\n`;
+        let descWithChapters = pack.metadata.description || '';
+        if (descWithChapters.includes('[CHAPTERS]')) {
+          const chaptersList = metaData.chapters?.map((c: any) => `${c.timestamp} ${c.label}`).join('\n') || '';
+          descWithChapters = descWithChapters.replace('[CHAPTERS]', chaptersList);
+        }
+        md += `${descWithChapters}\n\n`;
+
+        md += `### Chapters\n`;
+        metaData.chapters?.forEach((c: any) => {
+          md += `- **${c.timestamp}** ${c.label}\n`;
+        });
+        md += `\n`;
+
+        md += `### Tags\n`;
+        md += `${metaData.tags?.join(', ')}\n\n`;
+
+        md += `### Hashtags\n`;
+        md += `${metaData.hashtags?.join(' ')}\n\n`;
+
+        md += `### Thumbnail Hook\n`;
+        md += `*${pack.metadata.thumbnail_hook || metaData.thumbnail_hook}*\n\n`;
+      }
+
+      return md;
+    }
+
+    const { project: pObj, prompts: promptsList } = pack;
+
     let md = `# Production Package: ${project.title}\n\n`;
-    md += `**Topic:** ${project.topic}\n`;
+    md += `**Topic:** ${cleanTopicScaffolding(project.topic)}\n`;
     md += `**Visual Style:** ${project.visual_style}\n`;
     md += `**Aspect Ratio:** ${project.aspect_ratio}\n`;
     md += `**Narration Language:** ${project.narration_language}\n`;
@@ -93,8 +246,12 @@ export const ExportService = {
           const sData = JSON.parse(s.raw_json);
           md += `##### Scene ${s.scene_number}: ${s.title}\n`;
           md += `- **Visual Framing:** ${s.scene_description}\n`;
-          md += `- **Narration Fragment:** *"${s.narration_fragment}"*\n`;
-          md += `- **Continuity Notes:** ${s.continuity_notes}\n`;
+          const narrationText = s.narration_fragment ? `*"${s.narration_fragment}"*` : '(Silent B-Roll)';
+          md += `- **Narration Fragment:** ${narrationText}\n`;
+          const cleanNotes = sanitizeContinuityNotes(s.continuity_notes);
+          if (cleanNotes) {
+            md += `- **Continuity Notes:** ${cleanNotes}\n`;
+          }
           md += `- **Emotional Beat:** ${sData.emotional_beat} | **Transition:** ${sData.transition_to_next}\n`;
 
           const pObj = prompts.find((pr) => pr.phase_number === p.phase_number && pr.scene_number === s.scene_number);
@@ -118,6 +275,7 @@ export const ExportService = {
       }
       md += `\n`;
     });
+
     if (pack.metadata) {
       const metaData = JSON.parse(pack.metadata.raw_json);
       md += `--- \n\n`;
@@ -166,7 +324,101 @@ export const ExportService = {
    * Generates a plain text narration script.
    */
   exportTXT(pack: ExportPackage): string {
-    const { project, phases, prompts } = pack;
+    const { project, bible, phases, scenes, prompts } = pack;
+
+    if (project.content_profile === 'cinematic_series') {
+      let txt = '';
+      if (pack.metadata) {
+        const metaData = JSON.parse(pack.metadata.raw_json);
+        const selTitle = pack.metadata.selected_title || (metaData.titles?.[0]?.text || 'N/A');
+        const thumbHook = pack.metadata.thumbnail_hook || (metaData.thumbnail_hook || 'N/A');
+        txt += `=== CINEMATIC METADATA ===\n`;
+        txt += `Selected Title: ${selTitle}\n`;
+        txt += `Poster Hook: ${thumbHook}\n\n`;
+      }
+
+      txt += `=== SCREENPLAY: ${project.title} ===\n`;
+      txt += `Topic: ${cleanTopicScaffolding(project.topic)}\n`;
+      txt += `Style: ${project.visual_style}\n\n`;
+
+      if (bible) {
+        const bibleData = JSON.parse(bible.raw_json);
+        txt += `==================================================\n`;
+        txt += `PRODUCTION REGISTRIES\n`;
+        txt += `==================================================\n\n`;
+        
+        txt += `CREATURE REGISTRY:\n`;
+        const creatures = bibleData.creature_registry || [];
+        creatures.forEach((c: any) => {
+          txt += `- ${c.name} (Size: ${c.size || 'N/A'}): ${c.description || c.physical_description || 'N/A'}. Powers: ${(c.powers || []).join(', ')}\n`;
+        });
+        
+        txt += `\nWORLD/LOCATION LOCKS:\n`;
+        const locations = bibleData.location_roster || [];
+        locations.forEach((loc: any) => {
+          txt += `- ${loc.name} (${loc.type || 'exterior'}): ${loc.atmosphere || 'N/A'}. Lock: ${loc.visual_signature || 'N/A'}\n`;
+        });
+
+        txt += `\nWEAPON/ARTIFACT LOCKS:\n`;
+        const weapons = bibleData.object_registry || [];
+        weapons.forEach((obj: any) => {
+          txt += `- ${obj.name}: ${obj.description || 'N/A'}. Significance: ${obj.symbolic_meaning || 'N/A'}\n`;
+        });
+        txt += `\n==================================================\n\n`;
+      }
+
+      txt += `==================================================\n`;
+      txt += `SCREENPLAY & DIALOGUE\n`;
+      txt += `==================================================\n\n`;
+
+      phases.forEach((p) => {
+        txt += `PHASE ${p.phase_number}: ${p.phase_title.toUpperCase()}\n\n`;
+        const phaseScenes = scenes.filter((s) => s.phase_number === p.phase_number);
+        phaseScenes.forEach((s) => {
+          const sData = JSON.parse(s.raw_json);
+          const locationName = sData.location_id || 'LOC_001';
+          const timeOfDay = sData.visual_state_snapshot?.time_of_day?.toUpperCase() || 'N/A';
+
+          txt += `SCENE ${s.scene_number} - ${s.title.toUpperCase()}\n`;
+          txt += `${locationName} - ${timeOfDay}\n\n`;
+          txt += `${s.scene_description || sData.scene_description}\n\n`;
+
+          if (s.narration_fragment) {
+            txt += `    NARRATOR / VANCE\n`;
+            txt += `    (voiceover)\n`;
+            txt += `    "${s.narration_fragment}"\n\n`;
+          }
+
+          if (sData.dialogue && sData.dialogue !== 'None') {
+            txt += `    VANCE\n`;
+            txt += `    "${sData.dialogue}"\n\n`;
+          }
+
+          const cleanNotes = sanitizeContinuityNotes(s.continuity_notes);
+          if (cleanNotes) {
+            txt += `  [Continuity: ${cleanNotes}]\n\n`;
+          }
+        });
+        txt += `\n`;
+      });
+
+      txt += `==================================================\n`;
+      txt += `VEO CAMERA PROMPTS LIST\n`;
+      txt += `==================================================\n\n`;
+
+      prompts.forEach((vp, idx) => {
+        const pData = JSON.parse(vp.raw_json);
+        txt += `Prompt ${idx + 1} :\n`;
+        txt += `Visual: ${pData.visual || ''}\n`;
+        txt += `Lens: ${pData.lens || ''}\n`;
+        txt += `Lighting: ${pData.lighting || ''}\n`;
+        txt += `Camera: ${pData.camera || ''}\n`;
+        txt += `Dialogue: ${pData.dialogue || 'None'}\n`;
+        txt += `Avoid: ${pData.avoid || ''}\n\n`;
+      });
+
+      return txt;
+    }
 
     let txt = '';
     if (pack.metadata) {
@@ -179,7 +431,7 @@ export const ExportService = {
     }
 
     txt += `=== SCRIPT BOOKLET: ${project.title} ===\n`;
-    txt += `Topic: ${project.topic}\n`;
+    txt += `Topic: ${cleanTopicScaffolding(project.topic)}\n`;
     txt += `Style: ${project.visual_style}\n\n`;
     txt += `==================================================\n`;
     txt += `FULL NARRATION VOICEOVER\n`;

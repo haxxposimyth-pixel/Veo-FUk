@@ -99,8 +99,6 @@ or
 function applyBibleSystemPromptModifications(prompt: string): string {
   let normalized = prompt.replace(/\r\n/g, '\n');
 
-
-
   const targetInstructions = `7. Return ONLY raw JSON — no markdown fences, no prose before or after.`;
   const replacementInstructions = `7. Return ONLY raw JSON — no markdown fences, no prose before or after.
 
@@ -174,6 +172,103 @@ You MUST populate the "forbidden_elements" array inside "visual_style_lock" with
   return normalized;
 }
 
+function ensureCreaturesInRoster(bibleData: ProductionBibleData) {
+  const data = bibleData as any;
+  if (!data.raw_json) {
+    data.raw_json = {};
+  }
+  if (!data.raw_json.creature_registry) {
+    data.raw_json.creature_registry = [];
+  }
+  const characterRoster = bibleData.character_roster || [];
+  const creatureRegistry = data.raw_json.creature_registry || [];
+
+  for (const creature of creatureRegistry) {
+    const nameClean = (creature.name || '').toLowerCase().trim();
+    if (!nameClean) continue;
+
+    const exists = characterRoster.some(c => (c.name || '').toLowerCase().trim() === nameClean);
+    if (!exists) {
+      const currentIds = characterRoster.map(c => c.id).filter(id => typeof id === 'string' && id.startsWith('CHAR_'));
+      let nextNum = 1;
+      if (currentIds.length > 0) {
+        const nums = currentIds.map(id => parseInt(id.replace('CHAR_', ''), 10)).filter(n => !isNaN(n));
+        if (nums.length > 0) {
+          nextNum = Math.max(...nums) + 1;
+        }
+      }
+      const newId = `CHAR_${String(nextNum).padStart(3, '0')}`;
+
+      characterRoster.push({
+        id: newId,
+        name: creature.name,
+        role: `Creature: ${creature.name}`,
+        physical_description: creature.physical_design_lock || 'A dangerous creature.',
+        costume_description: 'None',
+        voice_tone: creature.sound_voice_signature || 'neutral',
+        significance: 'supporting',
+        is_narrator: false,
+        dna: {
+          facial_features: 'Non-human creature features.',
+          clothing: 'None',
+          age: 'N/A',
+          hairstyle: 'None',
+          body_type: creature.size_scale_class || 'medium',
+          consistency_notes: 'Maintain consistent creature appearance.',
+        },
+        appearance_lock: {
+          character_type: 'creature',
+          physical_description: creature.physical_design_lock || 'Non-human creature.',
+          style_notes: `Cinematic rendering of ${creature.name}.`,
+          forbidden_appearance_changes: ['Do not make human', 'Maintain color palette']
+        } as any
+      } as any);
+    } else {
+      const match = characterRoster.find(c => (c.name || '').toLowerCase().trim() === nameClean);
+      if (match && match.appearance_lock) {
+        (match.appearance_lock as any).character_type = 'creature';
+      }
+    }
+  }
+
+  bibleData.character_roster = characterRoster;
+}
+
+function ensureCreaturesInRegistry(bibleData: ProductionBibleData) {
+  const data = bibleData as any;
+  if (!data.raw_json) {
+    data.raw_json = {};
+  }
+  if (!data.raw_json.creature_registry) {
+    data.raw_json.creature_registry = [];
+  }
+  const characterRoster = bibleData.character_roster || [];
+  const creatureRegistry = data.raw_json.creature_registry || [];
+
+  for (const char of characterRoster) {
+    if ((char.appearance_lock as any)?.character_type === 'creature') {
+      const nameClean = (char.name || '').toLowerCase().trim();
+      if (!nameClean) continue;
+
+      const exists = creatureRegistry.some((cr: any) => (cr.name || '').toLowerCase().trim() === nameClean);
+      if (!exists) {
+        creatureRegistry.push({
+          name: char.name,
+          physical_design_lock: char.physical_description || (char.appearance_lock as any).physical_description || 'Predatory mechanical creature.',
+          size_scale_class: (char as any).dna?.body_type || 'medium',
+          powers_abilities: ['High speed', 'Advanced sensors'],
+          signature_behaviors: ['Silent tracking', 'Ambush attacks'],
+          weaknesses: ['EMP shockwaves'],
+          sound_voice_signature: char.voice_tone || 'growling',
+          faction_allegiance: 'None'
+        });
+      }
+    }
+  }
+
+  data.raw_json.creature_registry = creatureRegistry;
+}
+
 export class ProductionBibleAgent extends BaseAgent {
   constructor() {
     super('ProductionBibleAgent');
@@ -199,22 +294,22 @@ export class ProductionBibleAgent extends BaseAgent {
     const profileKey = proj?.content_profile || 'viral_story';
     const profile = resolveContentProfile(profileKey);
 
-    let profileTreatment: 'factual' | 'explainer' | 'narrative' = 'narrative';
-    if (profile.id === 'documentary' || profile.id === 'industry_profile' || profile.arcTemplate === '3-act-documentary') {
-      profileTreatment = 'factual';
-    } else if (profile.id === 'tutorial' || profile.id === 'listicle' || profile.id === 'product_showcase' || profile.arcTemplate === 'tutorial' || profile.arcTemplate === 'listicle') {
-      profileTreatment = 'explainer';
-    }
-
     let resolvedVideoType = 'documentary';
     if (storyPlan?.video_type && storyPlan.video_type !== 'auto') {
       resolvedVideoType = storyPlan.video_type;
-    } else {
-      if (proj && proj.content_type && proj.content_type !== 'auto') {
-        resolvedVideoType = proj.content_type;
-      } else if (storyPlan?.character_list && Array.isArray(storyPlan.character_list) && storyPlan.character_list.length > 0) {
-        resolvedVideoType = storyPlan.character_list.length === 1 ? 'presenter' : 'narrative';
-      }
+    } else if (proj && proj.content_type && proj.content_type !== 'auto') {
+      resolvedVideoType = proj.content_type;
+    } else if (storyPlan?.character_list && Array.isArray(storyPlan.character_list) && storyPlan.character_list.length > 0) {
+      resolvedVideoType = storyPlan.character_list.length === 1 ? 'presenter' : 'narrative';
+    }
+
+    let profileTreatment: 'factual' | 'explainer' | 'narrative' = 'narrative';
+    if (resolvedVideoType === 'montage') {
+      profileTreatment = 'factual';
+    } else if (profile.id === 'documentary' || profile.id === 'industry_profile' || profile.arcTemplate === '3-act-documentary') {
+      profileTreatment = 'factual';
+    } else if (profile.id === 'tutorial' || profile.id === 'listicle' || profile.id === 'product_showcase' || profile.arcTemplate === 'tutorial' || profile.arcTemplate === 'listicle') {
+      profileTreatment = 'explainer';
     }
 
     let groundedProductFacts: string | undefined = undefined;
@@ -241,8 +336,38 @@ export class ProductionBibleAgent extends BaseAgent {
       }
     }
 
-    const systemPrompt = applyBibleSystemPromptModifications(getBibleSystemPrompt());
-    const userPrompt   = getBibleUserPrompt(topic, visualStyle, language, aspectRatio, youtubeTranscript, storyPlan, resolvedVideoType, profileTreatment, groundedProductFacts);
+    let systemPrompt: string;
+    let userPrompt: string;
+
+    if (profileKey === 'cinematic_series') {
+      systemPrompt = getBibleSystemPrompt('cinematic_series');
+      userPrompt = getBibleUserPrompt(
+        topic,
+        visualStyle,
+        language,
+        aspectRatio,
+        youtubeTranscript,
+        storyPlan,
+        resolvedVideoType,
+        profileTreatment,
+        groundedProductFacts,
+        'cinematic_series',
+        proj?.movie_config
+      );
+    } else {
+      systemPrompt = applyBibleSystemPromptModifications(getBibleSystemPrompt());
+      userPrompt = getBibleUserPrompt(
+        topic,
+        visualStyle,
+        language,
+        aspectRatio,
+        youtubeTranscript,
+        storyPlan,
+        resolvedVideoType,
+        profileTreatment,
+        groundedProductFacts
+      );
+    }
 
     const bibleData = await this.generateStructured<ProductionBibleData>(
       projectId,
@@ -264,6 +389,11 @@ export class ProductionBibleAgent extends BaseAgent {
 
     bibleData.meta = bibleData.meta || {};
     bibleData.meta.language = language; // requested narration language is authoritative
+
+    if (profileKey === 'cinematic_series') {
+      ensureCreaturesInRoster(bibleData);
+      ensureCreaturesInRegistry(bibleData);
+    }
 
     // Check if repair pass is needed based on story relevance
     const currentRegistry = bibleData.object_registry || [];
@@ -300,58 +430,149 @@ export class ProductionBibleAgent extends BaseAgent {
       }
     }
 
-    const needsRepair = missingPlanObject || missingReferencedProp || (currentRegistry.length === 0 && ((storyPlan?.object_list && storyPlan.object_list.length > 0) || (bibleData.character_roster && bibleData.character_roster.length > 0)));
-
-    if (needsRepair) {
-      console.info(`[ProductionBibleAgent] Object registry has missing story-relevance objects, triggering repair pass...`);
-      try {
-        const repairOutput = await this.repairObjectRegistry(
-          projectId,
-          apiKey,
-          modelName,
-          bibleData.character_roster || [],
-          bibleData.location_roster || [],
-          currentRegistry,
-          config,
-          onChunk
-        );
-
-        // Merge the returned entries with the existing object_registry (deduplicate by name)
-        const mergedRegistry = [...currentRegistry];
-        const existingNames = new Set(currentRegistry.map(o => (o.name || '').toLowerCase().trim()));
-        for (const item of repairOutput) {
-          const nameClean = (item.name || '').toLowerCase().trim();
-          if (nameClean && !existingNames.has(nameClean)) {
-            mergedRegistry.push(item);
-            existingNames.add(nameClean);
+    const registeredCharNames = new Set((bibleData.character_roster || []).map(c => (c.name || '').toLowerCase().trim()));
+    let missingPlanCreature = false;
+    if (profileKey === 'cinematic_series' && storyPlan?.character_list && Array.isArray(storyPlan.character_list)) {
+      for (const planChar of storyPlan.character_list) {
+        if (planChar.character_type === 'creature') {
+          const nameClean = (planChar.name || '').toLowerCase().trim();
+          if (nameClean && !registeredCharNames.has(nameClean)) {
+            missingPlanCreature = true;
+            break;
           }
         }
-        bibleData.object_registry = mergedRegistry;
-
-        // Save the merged registry to the production_bibles table
-        BibleRepository.createOrUpdate(projectId, bibleData);
-
-        // Log this repair call to agent_logs with agent_name: 'ProductionBibleAgent_ObjectRepair'
-        try {
-          db.prepare(`
-            INSERT INTO agent_logs (id, project_id, agent_name, model_used, status, input_prompt, output_response)
-            VALUES (?, ?, ?, ?, 'success', ?, ?)
-          `).run(
-            crypto.randomUUID(),
-            projectId,
-            'ProductionBibleAgent_ObjectRepair',
-            modelName || 'gemini-2.5-pro',
-            `Objects before repair: ${currentRegistry.length}. Repairing...`,
-            `Deduplicated and merged registry. New size: ${mergedRegistry.length}`
-          );
-        } catch (logErr: any) {
-          console.error(`[ProductionBibleAgent] Failed to log repair: ${logErr.message}`);
-        }
-
-      } catch (err: any) {
-        console.error(`[ProductionBibleAgent] Object repair pass failed: ${err.message}`);
-        throw err;
       }
+    }
+
+    const needsRepair = missingPlanObject || missingReferencedProp || missingPlanCreature || (currentRegistry.length === 0 && ((storyPlan?.object_list && storyPlan.object_list.length > 0) || (bibleData.character_roster && bibleData.character_roster.length > 0)));
+
+    if (needsRepair) {
+      if (profileKey === 'cinematic_series') {
+        console.info(`[ProductionBibleAgent] Cinematic Production Bible needs repair, running repair pass...`);
+        try {
+          const repairOutput = await this.repairCinematicBible(
+            projectId,
+            apiKey,
+            modelName,
+            bibleData,
+            storyPlan,
+            config,
+            onChunk
+          );
+
+          // Merge characters
+          const mergedCharacters = [...(bibleData.character_roster || [])];
+          const existingCharNames = new Set(mergedCharacters.map(c => (c.name || '').toLowerCase().trim()));
+          for (const char of repairOutput.new_characters || []) {
+            const nameClean = (char.name || '').toLowerCase().trim();
+            if (nameClean && !existingCharNames.has(nameClean)) {
+              const currentIds = mergedCharacters.map(c => c.id).filter(id => typeof id === 'string' && id.startsWith('CHAR_'));
+              let nextNum = 1;
+              if (currentIds.length > 0) {
+                const nums = currentIds.map(id => parseInt(id.replace('CHAR_', ''), 10)).filter(n => !isNaN(n));
+                if (nums.length > 0) {
+                  nextNum = Math.max(...nums) + 1;
+                }
+              }
+              char.id = `CHAR_${String(nextNum).padStart(3, '0')}`;
+              mergedCharacters.push(char);
+              existingCharNames.add(nameClean);
+            }
+          }
+          bibleData.character_roster = mergedCharacters;
+
+          // Merge objects
+          const mergedRegistry = [...currentRegistry];
+          const existingNames = new Set(mergedRegistry.map(o => (o.name || '').toLowerCase().trim()));
+          for (const item of repairOutput.new_objects || []) {
+            const nameClean = (item.name || '').toLowerCase().trim();
+            if (nameClean && !existingNames.has(nameClean)) {
+              const currentIds = mergedRegistry.map(o => o.id).filter(id => typeof id === 'string' && id.startsWith('OBJ_'));
+              let nextNum = 1;
+              if (currentIds.length > 0) {
+                const nums = currentIds.map(id => parseInt(id.replace('OBJ_', ''), 10)).filter(n => !isNaN(n));
+                if (nums.length > 0) {
+                  nextNum = Math.max(...nums) + 1;
+                }
+              }
+              item.id = `OBJ_${String(nextNum).padStart(3, '0')}`;
+              mergedRegistry.push(item);
+              existingNames.add(nameClean);
+            }
+          }
+          bibleData.object_registry = mergedRegistry;
+
+          // Merge creature_registry
+          const data = bibleData as any;
+          if (!data.raw_json) data.raw_json = {};
+          if (!data.raw_json.creature_registry) data.raw_json.creature_registry = [];
+          const existingCreatureNames = new Set((data.raw_json.creature_registry || []).map((cr: any) => (cr.name || '').toLowerCase().trim()));
+          for (const cr of repairOutput.new_creatures || []) {
+            const nameClean = (cr.name || '').toLowerCase().trim();
+            if (nameClean && !existingCreatureNames.has(nameClean)) {
+              data.raw_json.creature_registry.push(cr);
+              existingCreatureNames.add(nameClean);
+            }
+          }
+
+          BibleRepository.createOrUpdate(projectId, bibleData);
+        } catch (err: any) {
+          console.error(`[ProductionBibleAgent] Cinematic repair pass failed: ${err.message}`);
+          throw err;
+        }
+      } else {
+        console.info(`[ProductionBibleAgent] Object registry has missing story-relevance objects, triggering repair pass...`);
+        try {
+          const repairOutput = await this.repairObjectRegistry(
+            projectId,
+            apiKey,
+            modelName,
+            bibleData.character_roster || [],
+            bibleData.location_roster || [],
+            currentRegistry,
+            config,
+            onChunk
+          );
+
+          const mergedRegistry = [...currentRegistry];
+          const existingNames = new Set(currentRegistry.map(o => (o.name || '').toLowerCase().trim()));
+          for (const item of repairOutput) {
+            const nameClean = (item.name || '').toLowerCase().trim();
+            if (nameClean && !existingNames.has(nameClean)) {
+              mergedRegistry.push(item);
+              existingNames.add(nameClean);
+            }
+          }
+          bibleData.object_registry = mergedRegistry;
+
+          BibleRepository.createOrUpdate(projectId, bibleData);
+
+          try {
+            db.prepare(`
+              INSERT INTO agent_logs (id, project_id, agent_name, model_used, status, input_prompt, output_response)
+              VALUES (?, ?, ?, ?, 'success', ?, ?)
+            `).run(
+              crypto.randomUUID(),
+              projectId,
+              'ProductionBibleAgent_ObjectRepair',
+              modelName || 'gemini-2.5-pro',
+              `Objects before repair: ${currentRegistry.length}. Repairing...`,
+              `Deduplicated and merged registry. New size: ${mergedRegistry.length}`
+            );
+          } catch (logErr: any) {
+            console.error(`[ProductionBibleAgent] Failed to log repair: ${logErr.message}`);
+          }
+        } catch (err: any) {
+          console.error(`[ProductionBibleAgent] Object repair pass failed: ${err.message}`);
+          throw err;
+        }
+      }
+    }
+
+    if (profileKey === 'cinematic_series') {
+      ensureCreaturesInRoster(bibleData);
+      ensureCreaturesInRegistry(bibleData);
+      BibleRepository.createOrUpdate(projectId, bibleData);
     }
 
     return bibleData;
@@ -419,7 +640,119 @@ Return ONLY valid JSON matching the schema (array of objects). No markdown fence
       (this as any).agentName = oldName;
     }
   }
+
+  /**
+   * Repair pass specifically for Cinematic projects (handles creatures & objects).
+   */
+  async repairCinematicBible(
+    projectId: string,
+    apiKey: string | undefined,
+    modelName: string | undefined,
+    bibleData: ProductionBibleData,
+    storyPlan: any,
+    config?: { temperature?: number; maxOutputTokens?: number },
+    onChunk?: (chunk: string) => void
+  ): Promise<any> {
+    const prompt = `You are a Production Bible Repair Assistant.
+Review the Approved Story Plan, the current character_roster, location_roster, object_registry, and raw_json.creature_registry.
+Identify:
+1. Any CREATURES/MONSTERS referenced in the Story Plan (especially character_list with character_type: 'creature') that are missing from character_roster or raw_json.creature_registry.
+2. Any story-critical OBJECTS, WEAPONS, or VEHICLES referenced in the Story Plan that are missing from object_registry.
+
+Generate the missing items.
+Return ONLY a JSON object containing three arrays of new items (do NOT include items that are already registered):
+{
+  "new_characters": [
+    {
+      "name": "string",
+      "role": "string",
+      "physical_description": "string",
+      "costume_description": "string",
+      "voice_tone": "string",
+      "significance": "string",
+      "is_narrator": false,
+      "dna": {
+        "facial_features": "string",
+        "clothing": "string",
+        "age": "string",
+        "hairstyle": "string",
+        "body_type": "string",
+        "consistency_notes": "string"
+      },
+      "appearance_lock": {
+        "character_type": "creature",
+        "physical_description": "string detailing visual/physical features. Surfaces must be clean, unbranded, and text-free.",
+        "style_notes": "string",
+        "forbidden_appearance_changes": ["string"]
+      }
+    }
+  ],
+  "new_objects": [
+    {
+      "name": "string",
+      "description": "string describing visual shape/details and function",
+      "symbolic_meaning": "string",
+      "screen_time": "string",
+      "is_hero_prop": true,
+      "is_branded_product": false,
+      "visual_lock": "string detailing visual lock and function. Must be completely clean and unbranded.",
+      "forbidden_variations": ["string"]
+    }
+  ],
+  "new_creatures": [
+    {
+      "name": "string",
+      "physical_design_lock": "string",
+      "size_scale_class": "string",
+      "powers_abilities": ["string"],
+      "signature_behaviors": ["string"],
+      "weaknesses": ["string"],
+      "sound_voice_signature": "string",
+      "faction_allegiance": "string"
+    }
+  ]
 }
 
-// Singleton — imported by the route handler
+Approved Story Plan:
+${JSON.stringify(storyPlan, null, 2)}
+
+Current Character Roster:
+${JSON.stringify(bibleData.character_roster || [], null, 2)}
+
+Current Object Registry:
+${JSON.stringify(bibleData.object_registry || [], null, 2)}
+
+Current Creature Registry:
+${JSON.stringify((bibleData as any).raw_json?.creature_registry || [], null, 2)}
+
+Return ONLY valid JSON. No markdown fences, no explanation.`;
+
+    const schema = z.object({
+      new_characters: z.array(z.any()).optional().default([]),
+      new_objects: z.array(z.any()).optional().default([]),
+      new_creatures: z.array(z.any()).optional().default([]),
+    });
+
+    const oldName = this.agentName;
+    (this as any).agentName = 'ProductionBibleAgent_CinematicRepair';
+    try {
+      const result = await this.generateStructured<any>(
+        projectId,
+        apiKey,
+        modelName,
+        {
+          prompt,
+          schema,
+          temperature: config?.temperature ?? 0.7,
+          maxOutputTokens: config?.maxOutputTokens ?? 8192,
+        },
+        onChunk
+      );
+      return result;
+    } finally {
+      (this as any).agentName = oldName;
+    }
+  }
+}
+
 export const productionBibleAgent = new ProductionBibleAgent();

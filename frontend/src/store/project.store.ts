@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, ProductionBibleData, Script, Phase, Scene, VeoPrompt, SceneItem, VeoPromptData, StoryPlanData, ScriptTone, StoryAnalysisData, CredibilityReviewData } from 'shared';
+import type { Project, ProductionBibleData, Script, Phase, Scene, VeoPrompt, SceneItem, VeoPromptData, StoryPlanData, ScriptTone, StoryAnalysisData, CredibilityReviewData, MovieConfig } from 'shared';
 import { projectsApi } from '../api/projects.api';
 import { bibleApi } from '../api/bible.api';
 import { storyPlanApi } from '../api/storyplan.api';
@@ -47,7 +47,7 @@ interface ProjectState {
   fetchProjectDetails: (id: string) => Promise<void>;
   setStoryAnalysis: (analysis: StoryAnalysisData | null) => void;
   setCredibilityReview: (review: CredibilityReviewData | null) => void;
-  createProject: (data: { title: string; topic: string; visual_style: string; narration_language: string; aspect_ratio: string; youtube_transcript?: string | null; content_type?: string; content_profile?: string; concept_brief?: string | null; style_id?: string | null }) => Promise<Project>;
+  createProject: (data: { title: string; topic: string; visual_style: string; narration_language: string; aspect_ratio: string; youtube_transcript?: string | null; content_type?: string; content_profile?: string; concept_brief?: string | null; style_id?: string | null; movie_config?: MovieConfig; target_duration_minutes?: number }) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   duplicateProject: (id: string) => Promise<Project>;
@@ -146,7 +146,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return;
     }
 
-    set({ activeProjectId: id });
+    set({
+      activeProjectId: id,
+      activeProject: null,
+      storyPlan: null,
+      bible: null,
+      productionBible: null,
+      script: null,
+      phases: [],
+      scenes: [],
+      veoPrompts: [],
+      storyAnalysis: null,
+      credibilityReview: null,
+    });
     await get().fetchProjectDetails(id);
   },
 
@@ -233,7 +245,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   createProject: async (data) => {
     set({ isLoading: true, error: null });
     try {
-      const project = await projectsApi.createProject(data);
+      const project = await projectsApi.createProject(data as any);
       await get().fetchProjects();
       set({ isLoading: false });
       return project;

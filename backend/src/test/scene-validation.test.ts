@@ -285,8 +285,8 @@ void (async () => {
     assert.ok(snapshot2);
     assert.ok(!snapshot2.key_visible_objects.includes('Magic Ring'));
 
-    // Verify that a note has been added to continuity_notes
-    assert.ok(result.scenes[1].continuity_notes.includes('Auto-removed unregistered object: Magic Ring'));
+    // Verify that a debug note is NOT added to continuity_notes
+    assert.ok(!result.scenes[1].continuity_notes.includes('Auto-removed unregistered object: Magic Ring'));
 
     // Simulate database write that happens in scenes.routes.ts
     const { SceneRepository } = require('../db/repositories/scene.repo');

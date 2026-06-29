@@ -9,8 +9,9 @@ import { checkProjectIntegrity } from '../utils/integrity';
 import { veoAgent, assembleVeoFullPrompt, checkAvoidContradiction } from '../agents/veo-agent';
 import { continuityAgent } from '../agents/continuity-agent';
 import { ContinuityRepository } from '../db/repositories/continuity.repo';
-import { veoPromptAgentOutputSchema, Project, veoPromptCompleteSchema, narrationFitsDuration, MAX_PHASE_COUNT } from 'shared';
+import { veoPromptAgentOutputSchema, Project, veoPromptCompleteSchema, narrationFitsDuration, MAX_PHASE_COUNT, resolveContentProfile } from 'shared';
 import { validateBody } from '../middleware/validate.middleware';
+import { getAssignedShotGrammar, resolveEnergyTier } from '../prompts/veo.prompt';
 import { sendSseChunk, sendSseDone, sendSseError, sendSseProgress } from '../utils/sse';
 import { StructuredOutputError } from '../utils/structured-output.error';
 import { validatePrompt } from '../utils/veo-validation';
@@ -72,12 +73,37 @@ function runShotDiversityPass(projectId: string, phaseNumber: number): void {
   try {
     const prompts = VeoPromptRepository.findByPhase(projectId, phaseNumber);
     const settings = SettingsRepository.getSettings();
-    for (let i = 1; i < prompts.length; i++) {
-      const prevData = JSON.parse(prompts[i - 1].raw_json);
+    const project = ProjectRepository.findById(projectId);
+    if (!project) return;
+
+    const allScenes = SceneRepository.findByProjectId(projectId);
+    const profile = resolveContentProfile(project.content_profile || 'viral_story');
+    const tier = resolveEnergyTier(profile);
+
+    for (let i = 0; i < prompts.length; i++) {
       const currData = JSON.parse(prompts[i].raw_json);
       
-      if (currData.shot_type === prevData.shot_type && currData.camera === prevData.camera) {
-        const warningMsg = `Shot diversity violation at Phase ${phaseNumber} Scene ${prompts[i].scene_number}: shot_type '${currData.shot_type}' and camera '${currData.camera}' repeated consecutively.`;
+      // Find the absolute scene index of this prompt
+      const absIndex = allScenes.findIndex(s => s.phase_number === prompts[i].phase_number && s.scene_number === prompts[i].scene_number);
+      if (absIndex === -1) continue;
+
+      const expected = getAssignedShotGrammar(absIndex, tier);
+
+      // Mismatch check (camera and shot_type)
+      const modelCamera = (currData.camera || '').toLowerCase().trim();
+      const expectedCamera = expected.cameraMove.toLowerCase().trim();
+      const modelShotType = (currData.shot_type || '').toLowerCase().trim();
+      const expectedShotSize = expected.shotSize.toLowerCase().trim();
+
+      const cameraMatch = modelCamera === expectedCamera || modelCamera.includes(expectedCamera) || expectedCamera.includes(modelCamera);
+      const shotTypeMatch = modelShotType === expectedShotSize;
+
+      if (!cameraMatch || !shotTypeMatch) {
+        let mismatchDetails = [];
+        if (!cameraMatch) mismatchDetails.push(`camera '${currData.camera}' vs expected '${expected.cameraMove}'`);
+        if (!shotTypeMatch) mismatchDetails.push(`shot_type '${currData.shot_type}' vs expected '${expected.shotSize}'`);
+        
+        const warningMsg = `Shot assignment mismatch at Phase ${phaseNumber} Scene ${prompts[i].scene_number}: ${mismatchDetails.join(', ')}.`;
         console.warn(`[VeoAgent] ${warningMsg}`);
         
         // Log warning to agent_logs
@@ -157,7 +183,8 @@ async function generateSinglePrompt(
   settings: any,
   sseAgentName: string,
   onChunk?: (chunk: string) => void,
-  projectParam?: any
+  projectParam?: any,
+  assignedConstraints?: { cameraMove: string; shotSize: string }
 ) {
   const project = projectParam ?? ProjectRepository.findById(projectId);
   if (!project) throw new Error('Project not found');
@@ -225,7 +252,9 @@ async function generateSinglePrompt(
     undefined,
     settings.model,
     { temperature: settings.temperature, maxOutputTokens: settings.maxTokens },
-    onChunk
+    onChunk,
+    undefined,
+    assignedConstraints
   );
   // === VVS OPT FIX-1D END ===
 
@@ -560,9 +589,16 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
           scene: sceneRow.scene_number
         });
         // === VVS OPT FIX-1D START ===
+        const allScenes = SceneRepository.findByProjectId(id);
+        const absoluteIndex = allScenes.findIndex(s => s.id === sceneRow.id);
+        const profile = resolveContentProfile(project.content_profile || 'viral_story');
+        const tier = resolveEnergyTier(profile);
+        const assignedConstraints = getAssignedShotGrammar(absoluteIndex, tier);
+
         await generateSinglePrompt(id, sceneRow, bibleData, settings, sseAgentName, (chunk) =>
           sendSseChunk(id, sseAgentName, chunk),
-          project
+          project,
+          assignedConstraints
         );
         // === VVS OPT FIX-1D END ===
 
@@ -602,6 +638,10 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
 
         sendSseChunk(id, sseAgentName, `\nGenerating ${total} prompts with concurrency limit of ${limit}...\n`);
 
+        const allScenes = SceneRepository.findByProjectId(id);
+        const profile = resolveContentProfile(project.content_profile || 'viral_story');
+        const tier = resolveEnergyTier(profile);
+
         await runWithConcurrency(scenesToProcess, limit, async (sceneRow) => {
           const currentProgress = ++count;
           sendSseProgress(id, sseAgentName, {
@@ -611,27 +651,52 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
             scene: sceneRow.scene_number
           });
           sendSseChunk(id, sseAgentName, `\n--- Generating Prompt for Scene ${currentProgress}/${total} (Phase ${sceneRow.phase_number} Scene ${sceneRow.scene_number}) ---\n`);
-          try {
-            // === VVS OPT FIX-1D START ===
-            const promptData = await Promise.race([
-              generateSinglePrompt(id, sceneRow, bibleData, settings, sseAgentName, undefined, project),
-              new Promise<any>((_, reject) =>
-                setTimeout(() => reject(new Error(`Scene ${sceneRow.scene_number} timed out after 90s`)), SCENE_TIMEOUT_MS)
-              )
-            ]);
-            // === VVS OPT FIX-1D END ===
-            if (promptData.status === 'failed' || promptData.visual_truncated === 1) {
-              sendSseChunk(id, sseAgentName, `\n[Phase ${sceneRow.phase_number} Scene ${sceneRow.scene_number} Failed: Prompt was incomplete or truncated]\n`);
+          
+          const absoluteIndex = allScenes.findIndex(s => s.id === sceneRow.id);
+          const assignedConstraints = getAssignedShotGrammar(absoluteIndex, tier);
+
+          let promptData: any = null;
+          let attempts = 0;
+          const maxAttempts = 3;
+          while (attempts < maxAttempts) {
+            try {
+              // === VVS OPT FIX-1D START ===
+              promptData = await Promise.race([
+                generateSinglePrompt(id, sceneRow, bibleData, settings, sseAgentName, undefined, project, assignedConstraints),
+                new Promise<any>((_, reject) =>
+                  setTimeout(() => reject(new Error(`Scene ${sceneRow.scene_number} timed out after 90s`)), SCENE_TIMEOUT_MS)
+                )
+              ]);
+              // === VVS OPT FIX-1D END ===
+              break;
+            } catch (err: any) {
+              attempts++;
+              const errMsg = err?.message || String(err);
+              const isTransient = errMsg.toLowerCase().includes('fallback chain failed') ||
+                                  errMsg.toLowerCase().includes('timeout') ||
+                                  errMsg.toLowerCase().includes('rate') ||
+                                  errMsg.toLowerCase().includes('quota');
+              
+              if (!isTransient || attempts >= maxAttempts) {
+                console.error(`VeoAgent failed for scene ${sceneRow.scene_number} after ${attempts} attempt(s): ${errMsg}`);
+                // Mark scene as failed in DB
+                db.prepare(
+                  `UPDATE scenes SET veo_prompt_generated = 0 
+                   WHERE id = ?`
+                ).run(sceneRow.id);
+                
+                sendSseChunk(id, sseAgentName, `\n[Scene ${sceneRow.scene_number} Failed: ${errMsg}]\n`);
+                break;
+              } else {
+                const backoffMs = attempts === 1 ? 1500 : 3000;
+                sendSseChunk(id, sseAgentName, `\n[Scene ${sceneRow.scene_number} Transient Failure (attempt ${attempts}/${maxAttempts}): ${errMsg}. Retrying in ${backoffMs / 1000}s...]\n`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+              }
             }
-          } catch (err: any) {
-            console.error(`VeoAgent failed for scene ${sceneRow.scene_number}: ${err.message}`);
-            // Mark scene as failed in DB
-            db.prepare(
-              `UPDATE scenes SET veo_prompt_generated = 0 
-               WHERE id = ?`
-            ).run(sceneRow.id);
-            
-            sendSseChunk(id, sseAgentName, `\n[Scene ${sceneRow.scene_number} Failed: ${err.message}]\n`);
+          }
+
+          if (promptData && (promptData.status === 'failed' || promptData.visual_truncated === 1)) {
+            sendSseChunk(id, sseAgentName, `\n[Phase ${sceneRow.phase_number} Scene ${sceneRow.scene_number} Failed: Prompt was incomplete or truncated]\n`);
           }
         });
 
@@ -701,6 +766,10 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
           return;
         }
 
+        const allScenes = SceneRepository.findByProjectId(id);
+        const profile = resolveContentProfile(project.content_profile || 'viral_story');
+        const tier = resolveEnergyTier(profile);
+
         const SCENE_TIMEOUT_MS = 90000;
         const total = missingScenes.length;
         let count = 0;
@@ -736,27 +805,52 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
                 scene: sceneRow.scene_number
               });
               sendSseChunk(id, sseAgentName, `\n--- Generating Prompt ${currentProgress}/${missingScenes.length} (Phase ${sceneRow.phase_number} Scene ${sceneRow.scene_number}) ---\n`);
-              try {
-                // === VVS OPT FIX-1D START ===
-                const promptData = await Promise.race([
-                  generateSinglePrompt(id, sceneRow, bibleData, settings, sseAgentName, undefined, project),
-                  new Promise<any>((_, reject) =>
-                    setTimeout(() => reject(new Error(`Scene ${sceneRow.scene_number} timed out after 90s`)), SCENE_TIMEOUT_MS)
-                  )
-                ]);
-                // === VVS OPT FIX-1D END ===
-                if (promptData.status === 'failed' || promptData.visual_truncated === 1) {
-                  sendSseChunk(id, sseAgentName, `\n[Phase ${sceneRow.phase_number} Scene ${sceneRow.scene_number} Failed: Prompt was incomplete or truncated]\n`);
+              
+              const absoluteIndex = allScenes.findIndex(s => s.id === sceneRow.id);
+              const assignedConstraints = getAssignedShotGrammar(absoluteIndex, tier);
+
+              let promptData: any = null;
+              let attempts = 0;
+              const maxAttempts = 3;
+              while (attempts < maxAttempts) {
+                try {
+                  // === VVS OPT FIX-1D START ===
+                  promptData = await Promise.race([
+                    generateSinglePrompt(id, sceneRow, bibleData, settings, sseAgentName, undefined, project, assignedConstraints),
+                    new Promise<any>((_, reject) =>
+                      setTimeout(() => reject(new Error(`Scene ${sceneRow.scene_number} timed out after 90s`)), SCENE_TIMEOUT_MS)
+                    )
+                  ]);
+                  // === VVS OPT FIX-1D END ===
+                  break;
+                } catch (err: any) {
+                  attempts++;
+                  const errMsg = err?.message || String(err);
+                  const isTransient = errMsg.toLowerCase().includes('fallback chain failed') ||
+                                      errMsg.toLowerCase().includes('timeout') ||
+                                      errMsg.toLowerCase().includes('rate') ||
+                                      errMsg.toLowerCase().includes('quota');
+                  
+                  if (!isTransient || attempts >= maxAttempts) {
+                    console.error(`VeoAgent failed for scene ${sceneRow.scene_number} after ${attempts} attempt(s): ${errMsg}`);
+                    // Mark scene as failed in DB
+                    db.prepare(
+                      `UPDATE scenes SET veo_prompt_generated = 0 
+                       WHERE id = ?`
+                    ).run(sceneRow.id);
+                    
+                    sendSseChunk(id, sseAgentName, `\n[Scene ${sceneRow.scene_number} Failed: ${errMsg}]\n`);
+                    break;
+                  } else {
+                    const backoffMs = attempts === 1 ? 1500 : 3000;
+                    sendSseChunk(id, sseAgentName, `\n[Scene ${sceneRow.scene_number} Transient Failure (attempt ${attempts}/${maxAttempts}): ${errMsg}. Retrying in ${backoffMs / 1000}s...]\n`);
+                    await new Promise(resolve => setTimeout(resolve, backoffMs));
+                  }
                 }
-              } catch (err: any) {
-                console.error(`VeoAgent failed for scene ${sceneRow.scene_number}: ${err.message}`);
-                // Mark scene as failed in DB
-                db.prepare(
-                  `UPDATE scenes SET veo_prompt_generated = 0 
-                   WHERE id = ?`
-                ).run(sceneRow.id);
-                
-                sendSseChunk(id, sseAgentName, `\n[Scene ${sceneRow.scene_number} Failed: ${err.message}]\n`);
+              }
+
+              if (promptData && (promptData.status === 'failed' || promptData.visual_truncated === 1)) {
+                sendSseChunk(id, sseAgentName, `\n[Phase ${sceneRow.phase_number} Scene ${sceneRow.scene_number} Failed: Prompt was incomplete or truncated]\n`);
               }
             });
 

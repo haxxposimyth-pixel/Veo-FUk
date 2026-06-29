@@ -32,7 +32,74 @@ export class TitleMetadataAgent extends BaseAgent {
       })
       .join('\n');
 
-    const prompt = `You are a YouTube SEO and title optimization expert specializing in viral content. Based on the provided video script, generate YouTube metadata optimized for maximum click-through rate and discoverability.
+    let prompt = '';
+    if (project?.content_profile === 'cinematic_series') {
+      const movieConfig = (project as any).movie_config || {};
+      const format = movieConfig.format || 'single_movie';
+      const genre = movieConfig.genre || 'Cinematic';
+      const tone = (movieConfig.tone || []).join(', ') || 'dramatic';
+      const season = movieConfig.season_number ?? 1;
+      const episode = movieConfig.episode_number ?? 1;
+
+      prompt = `You are a professional Screenplay Publicist and Cinematic Marketing copywriter. Based on the provided video script, generate cinematic metadata (titles, logline, description, and tags) optimized for maximum prestige, engagement, and audience reach.
+
+Write all copy in ${narrationLanguage}. If ${narrationLanguage} is Hindi, use Devanagari.
+
+PROJECT DETAILS:
+- Format: ${format}
+- Genre: ${genre}
+- Tone: ${tone}
+- Season Number: ${season}
+- Episode Number: ${episode}
+- Topic/Seed: ${topic}
+
+PRODUCTION BIBLE DETAILS:
+Visual Style: ${bibleData.visual_style_lock?.color_mood || 'N/A'}
+Active Characters:
+${characterSummary || 'None'}
+
+STORY ANALYSIS SUMMARY:
+${storyAnalysisSummary || 'N/A'}
+
+PHASES NARRATION PREVIEWS:
+${phasesSummary}
+
+TITLE RULES: Generate exactly 8 title variants.
+- For series formats ('episode_series' or 'season_based_series'), format the titles in a series/episode-aware style, e.g.:
+  "Series Title - S${season}E${episode}: [Episode Subtitle]"
+- For 'single_movie' formats, format the titles as movie titles with sub-headings, e.g.:
+  "Movie Title: [Compelling Subtitle]" or similar cinematic titles.
+Each title: max 60 characters, no cheap clickbait, no ALL CAPS, sentence/title case.
+
+DESCRIPTION: Write a cinematic description (250–350 words):
+1. A strong, dramatic logline (1-2 sentences) at the very top.
+2. A compelling narrative synopsis of the episode/film (2 paragraphs, no spoilers).
+3. A credit-style production block (Directors/Cast/Credits placeholder) and call to action.
+Include the [CHAPTERS] placeholder where the chapter list will be inserted.
+
+CHAPTERS: Generate chapter timestamps using the 10 phase titles. Format: 00:00 Phase Title. Start at 00:00 with ~30s intervals sequentially (e.g. 00:00, 00:30, 01:00, etc.).
+
+TAGS: Generate 20 tags. Include the genre, tone, main character/creature names, and cinematic terms.
+
+HASHTAGS: Generate 5 hashtags (e.g. #[genre], #[character], #[seriesname], etc.).
+
+THUMBNAIL_HOOK: Write a 6-word max text overlay for the poster/thumbnail.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "titles": [
+    { "text": "string", "structure_type": "string", "char_count": 0 }
+  ],
+  "description": "string",
+  "chapters": [
+    { "timestamp": "string", "label": "string" }
+  ],
+  "tags": ["string"],
+  "hashtags": ["string"],
+  "thumbnail_hook": "string"
+}`;
+    } else {
+      prompt = `You are a YouTube SEO and title optimization expert specializing in viral content. Based on the provided video script, generate YouTube metadata optimized for maximum click-through rate and discoverability.
 
 Write the YouTube title, description, and tags in ${narrationLanguage}. If ${narrationLanguage} is Hindi, use Devanagari (tags may include common English keywords for SEO).
 
@@ -86,6 +153,7 @@ Return ONLY valid JSON in this exact shape:
   "hashtags": ["string"],
   "thumbnail_hook": "string"
 }`;
+    }
 
     return this.generateStructured<VideoMetadataData>(
       projectId,

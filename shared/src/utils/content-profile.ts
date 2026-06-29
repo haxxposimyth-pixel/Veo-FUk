@@ -175,6 +175,38 @@ const profiles: Record<string, ContentProfileConfig> = {
       }
     ]
   },
+  'cinematic_series': {
+    id: 'cinematic_series',
+    arcTemplate: '5-act-viral',
+    engagementIntensity: 'high',
+    scoringObjective: 'You are an episodic cinematic showrunner scoring for cinematic tension, hook intensity, cliffhangers, and character-driven high stakes.',
+    cameraEnergy: 'dynamic',
+    defaultCharacterCount: 4,
+    defaultVisualStyleKey: 'photoreal_cinematic',
+    hookThreshold: 7.0,
+    hookCriteria: [
+      {
+        key: 'pattern_interrupt',
+        label: 'Inciting Incident / Hook',
+        prompt: 'Does the opening immediately pull the audience into a high-stakes cinematic incident, intense character dynamic, or jarring visual conflict?'
+      },
+      {
+        key: 'stakes_clarity',
+        label: 'Cinematic Stakes',
+        prompt: 'Are the immediate life-or-death, emotional, or narrative stakes established within the opening moments?'
+      },
+      {
+        key: 'curiosity_gap',
+        label: 'Narrative Hook / Cliffhanger',
+        prompt: 'Is there a compelling micro-cliffhanger or central question established to sustain episodic viewer retention?'
+      },
+      {
+        key: 'scroll_stop_power',
+        label: 'Cinematic Grip',
+        prompt: 'Does the opening narration and action bypass exposition to instantly grip the audience and hook them into the scene?'
+      }
+    ]
+  },
   'industry_profile': {
     id: 'industry_profile',
     arcTemplate: '3-act-documentary',
@@ -238,6 +270,134 @@ const profiles: Record<string, ContentProfileConfig> = {
         prompt: 'Will the viewer trust the presentation and stay engaged for the detailed feature breakdown?'
       }
     ]
+  },
+  'episodic_animated_story': {
+    id: 'episodic_animated_story',
+    arcTemplate: '5-act-viral',
+    engagementIntensity: 'high',
+    scoringObjective: 'You are an animation showrunner scoring for episodic hooks, character development, and narrative pacing.',
+    cameraEnergy: 'dynamic',
+    defaultCharacterCount: 4,
+    defaultVisualStyleKey: 'photoreal_cinematic',
+    hookThreshold: 7.0,
+    hookCriteria: [
+      {
+        key: 'pattern_interrupt',
+        label: 'Hook / Inciting Angle',
+        prompt: 'Does the opening drop the viewer directly into a compelling scene, mood, or character conflict?'
+      },
+      {
+        key: 'stakes_clarity',
+        label: 'Stakes Clarity',
+        prompt: 'Are the narrative stakes or character desires clearly set up or hinted at early on?'
+      },
+      {
+        key: 'curiosity_gap',
+        label: 'Narrative Gap',
+        prompt: 'Is there a mystery or unanswered narrative question that creates immediate tension?'
+      },
+      {
+        key: 'scroll_stop_power',
+        label: 'Immersive Pull',
+        prompt: 'Does the opening establish a rich atmosphere and sensory details that draw the viewer in, avoiding cliché generic introductions?'
+      }
+    ]
+  },
+  'kids_educational_story': {
+    id: 'kids_educational_story',
+    arcTemplate: 'tutorial',
+    engagementIntensity: 'medium',
+    scoringObjective: 'You are a children\'s educational media expert scoring for clear storytelling, educational value, and engaging pacing.',
+    cameraEnergy: 'standard',
+    defaultCharacterCount: 2,
+    defaultVisualStyleKey: '3d_explainer_environments',
+    hookThreshold: 6.0,
+    hookCriteria: [
+      {
+        key: 'pattern_interrupt',
+        label: 'Problem Statement',
+        prompt: 'Does the opening clearly frame a real-world problem, challenge, or learning objective?'
+      },
+      {
+        key: 'stakes_clarity',
+        label: 'Relevance & Value',
+        prompt: 'Is it clear how solving this problem benefits the learner or what the stakes are if ignored?'
+      },
+      {
+        key: 'curiosity_gap',
+        label: 'Curiosity Gap',
+        prompt: 'Is there an engaging question or puzzle that primes the learner for the upcoming steps?'
+      },
+      {
+        key: 'scroll_stop_power',
+        label: 'Promise of Payoff',
+        prompt: "Will the learner trust they'll gain a clear skill? Specifically, does the opening establish credible expertise and layout a clear promise of what will be learned without hype or clickbait?"
+      }
+    ]
+  },
+  'historical_deep_dive': {
+    id: 'historical_deep_dive',
+    arcTemplate: '3-act-documentary',
+    engagementIntensity: 'medium',
+    scoringObjective: 'You are a historical documentary editor scoring for chronological flow, educational depth, and narrative intrigue.',
+    cameraEnergy: 'standard',
+    defaultCharacterCount: 4,
+    defaultVisualStyleKey: 'documentary_realism',
+    hookThreshold: 6.5,
+    hookCriteria: [
+      {
+        key: 'pattern_interrupt',
+        label: 'Intriguing Angle',
+        prompt: 'Does the opening raise a compelling question, tension, or little-known angle (NOT necessarily a shocking contradiction)?'
+      },
+      {
+        key: 'stakes_clarity',
+        label: 'Stakes Clarity',
+        prompt: "Is it clear why this subject matters / what's at stake?"
+      },
+      {
+        key: 'curiosity_gap',
+        label: 'Curiosity Gap',
+        prompt: 'Is there an unresolved question that compels continued watching?'
+      },
+      {
+        key: 'scroll_stop_power',
+        label: 'Narrative Pull',
+        prompt: 'Does the opening, over a compelling visual, draw the viewer into the subject and establish sustained interest? (Do NOT require 5-second scroll-stopping.)'
+      }
+    ]
+  },
+  'vlog_day_in_life': {
+    id: 'vlog_day_in_life',
+    arcTemplate: '5-act-viral',
+    engagementIntensity: 'medium',
+    scoringObjective: 'You are a lifestyle vlog strategist scoring for personal connection, relatable hooks, and smooth transitions.',
+    cameraEnergy: 'standard',
+    defaultCharacterCount: 2,
+    defaultVisualStyleKey: 'photoreal_cinematic',
+    hookThreshold: 6.0,
+    hookCriteria: [
+      {
+        key: 'pattern_interrupt',
+        label: 'Pattern Interrupt',
+        prompt: 'Does the opening sentence immediately challenge a common belief, present a shocking contradiction, or create cognitive dissonance?'
+      },
+      {
+        key: 'stakes_clarity',
+        label: 'Stakes Clarity',
+        prompt: 'Are the consequences or payoff of watching clearly implied within the first 3 sentences?'
+      },
+      {
+        key: 'curiosity_gap',
+        label: 'Curiosity Gap',
+        prompt: 'Is there an unanswered question or unresolved tension that compels the viewer to keep watching?'
+      },
+      {
+        key: 'scroll_stop_power',
+        label: 'Scroll Stop Power',
+        prompt: "Would this narration, heard over a compelling visual, make someone stop scrolling in the first 5 seconds? Specifically penalize any hook that contains Beat 3 answer hints (hints or answers to the curiosity gap question), transition summaries (explaining what the video will cover), or any of these prohibited clichés:\n   - 'You have been fed a...'\n   - 'History books will tell you...'\n   - 'Most people don't know...'\n   - 'What they don't want you to know...'\n   - 'Let that sink in.'\n   - 'The truth is...'\n   - 'It's more complicated than that.'\n   - 'Throughout history...'\n   - 'In a world where...'\n   - Any phrase that promises to reveal something without immediately revealing it."
+      }
+    ]
   }
 };
 
@@ -250,13 +410,18 @@ export function resolveContentProfile(profileKey: string): ContentProfileConfig 
  * Matrix defining which video structures (content_types) are coherent with each content profile.
  */
 export const PROFILE_TYPE_COHERENCE_MATRIX: Record<string, string[]> = {
-  viral_story: ['narrative'],
+  viral_story: ['narrative', 'montage'],
   narrative_fiction: ['narrative'],
+  cinematic_series: ['narrative'],
   documentary: ['documentary'],
   industry_profile: ['documentary'],
   tutorial: ['presenter', 'documentary'],
   listicle: ['presenter', 'documentary'],
   product_showcase: ['presenter', 'documentary'],
+  episodic_animated_story: ['narrative'],
+  kids_educational_story: ['narrative', 'presenter', 'documentary', 'montage'],
+  historical_deep_dive: ['documentary', 'montage'],
+  vlog_day_in_life: ['presenter', 'documentary', 'montage'],
 };
 
 /**

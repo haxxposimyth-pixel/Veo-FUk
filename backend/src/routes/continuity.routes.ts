@@ -217,6 +217,10 @@ router.post('/:id/continuity-warnings/:warningId/fix', async (req: Request, res:
     const sceneData = JSON.parse(sceneRow.raw_json);
     const bibleData = JSON.parse(bible.raw_json);
 
+    if (project.content_profile === 'cinematic_series') {
+      console.log(`[Continuity Route] Fixing cinematic continuity warning: ${warning.issue}`);
+    }
+
     // 2. Call ContinuityAgent to fix
     const correctedValue = await continuityAgent.fixWarning(
       promptData,

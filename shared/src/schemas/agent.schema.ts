@@ -143,6 +143,7 @@ export const locationRosterItemSchema = z
     lighting_notes:      z.string().min(1).optional().default(''),
     time_of_day_default: z.string().min(1).optional().default('day'),
     visual_signature:    z.string().min(1).optional().default(''),
+    setting:             z.enum(['interior', 'exterior', 'mixed']).optional(),
   })
   .passthrough()
   .transform((v) => ({
@@ -152,6 +153,7 @@ export const locationRosterItemSchema = z
     lighting_notes:      v.lighting_notes      ?? '',
     time_of_day_default: v.time_of_day_default ?? 'day',
     visual_signature:    v.visual_signature    ?? '',
+    setting:             v.setting,
   }));
 
 export const objectRegistryItemSchema = z
@@ -597,6 +599,8 @@ export const veoPromptAgentOutputSchema = z
     connection:       z.string(),
     narration:        z.string().min(0),
     duration_seconds: z.coerce.number().int().optional(),
+    action_arc:       z.string().describe('A temporal Start->Motion->End description of one continuous ~8s action (e.g. locomotive enters frame from left, accelerates as ballast dust lifts, sunlight rakes across the steel flank, settling as the rear power car clears the curve). Must stay one continuous shot with no scene cuts inside.'),
+    in_clip_transition: z.string().optional(),
     scene_type:       z.enum(['rapid_cut', 'standard', 'short_punch', 'slow_burn']).optional().default('standard'),
     veo_full_prompt:  z.string().optional(),
     avoid_contradiction: z.number().optional(),
@@ -619,6 +623,8 @@ export const veoPromptAgentOutputSchema = z
     sfx: v.sfx ?? 'None',
     dialogue: v.dialogue ?? '',
     duration_seconds: v.duration_seconds ?? 8,
+    action_arc: v.action_arc,
+    in_clip_transition: v.in_clip_transition ?? '',
     scene_type: v.scene_type ?? 'standard',
     veo_full_prompt: v.veo_full_prompt ?? '',
     spoken_on_camera: v.spoken_on_camera ?? false,
@@ -641,6 +647,8 @@ export const veoPromptCompleteSchema = z
     connection:       z.string().min(1),
     narration:        z.string().min(0),
     duration_seconds: z.number().int(),
+    action_arc:       z.string().optional().default(''),
+    in_clip_transition: z.string().optional().default(''),
   })
   .passthrough();
 
@@ -759,7 +767,15 @@ export const visualStateSnapshotSchema = z.object({
   location_state: z.string(),
   time_of_day: z.string(),
   weather_or_atmosphere: z.string(),
-  key_objects_visible: z.array(z.string())
+  key_objects_visible: z.array(z.string()),
+  character_damage: z.record(z.string(), z.string()).optional().default({}),
+  costume_armor_state: z.record(z.string(), z.string()).optional().default({}),
+  creature_states: z.array(z.object({
+    name: z.string(),
+    status: z.enum(['unharmed', 'injured', 'defeated', 'dead']),
+    powers_active: z.boolean().optional()
+  })).optional().default([]),
+  environmental_destruction: z.string().optional().default('')
 }).nullable();
 
 export const strictVisualStateSnapshotSchema = z.object({
@@ -773,7 +789,15 @@ export const strictVisualStateSnapshotSchema = z.object({
   location_state: z.string(),
   time_of_day: z.string(),
   atmosphere: z.string(),
-  key_visible_objects: z.array(z.string())
+  key_visible_objects: z.array(z.string()),
+  character_damage: z.record(z.string(), z.string()).optional().default({}),
+  costume_armor_state: z.record(z.string(), z.string()).optional().default({}),
+  creature_states: z.array(z.object({
+    name: z.string(),
+    status: z.enum(['unharmed', 'injured', 'defeated', 'dead']),
+    powers_active: z.boolean().optional()
+  })).optional().default([]),
+  environmental_destruction: z.string().optional().default('')
 });
 
 export const extendedSceneItemSchema = z
@@ -911,7 +935,7 @@ export const engagementBlueprintSchema = z.object({
 });
 
 export const conceptAgentOutputSchema: z.ZodType<any, any, any> = z.object({
-  content_type: z.enum(['documentary','narrative','presenter']),
+  content_type: z.enum(['documentary','narrative','presenter','montage']),
   project_topic: z.string().min(50).max(1800),
   titles: z.array(conceptTitleSchema).min(6),
   engagement_blueprint: engagementBlueprintSchema,
@@ -919,13 +943,15 @@ export const conceptAgentOutputSchema: z.ZodType<any, any, any> = z.object({
   suggested_length: z.string().optional(),
   thumbnail_concept: z.string().default(''),
   keywords: z.array(z.string()).default([]),
+  content_profile: z.string().optional(),
 }).passthrough()
   .transform(v => ({ ...v, titles: [...v.titles].sort((a,b)=>b.click_score-a.click_score).slice(0,10) }));
 
 export const conceptTopicOnlySchema = z.object({
-  content_type: z.enum(['documentary','narrative','presenter']),
+  content_type: z.enum(['documentary','narrative','presenter','montage']),
   project_topic: z.string().min(50).max(1800),
   engagement_blueprint: engagementBlueprintSchema,
+  content_profile: z.string().optional(),
 }).passthrough();
 
 export const conceptStyleSelectionSchema = z.object({

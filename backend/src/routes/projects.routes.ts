@@ -27,7 +27,7 @@ router.post(
     const contentType = body.content_type || 'auto';
 
     if ((req as any)._contentProfileAbsent) {
-      if (contentType === 'documentary') {
+      if (contentType === 'documentary' || contentType === 'montage') {
         body.content_profile = 'documentary';
       } else if (contentType === 'narrative') {
         body.content_profile = 'narrative_fiction';

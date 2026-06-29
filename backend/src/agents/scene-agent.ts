@@ -21,7 +21,7 @@ try {
   // Column already exists or table is locked
 }
 
-import { extendedSceneItemSchema, extendedSceneAgentOutputSchema, strictVisualStateSnapshotSchema } from 'shared';
+import { extendedSceneItemSchema, extendedSceneAgentOutputSchema, strictVisualStateSnapshotSchema, normalizeTextNumbers } from 'shared';
 
 // Monkeypatch SceneRepository to support visual_state_snapshot
 const originalCreateOrUpdateBatch = SceneRepository.createOrUpdateBatch;
@@ -125,6 +125,82 @@ function resolveCharacterName(
   return bestMatch; // null if no match within distance
 }
 // === VVS OPT FIX-2 MATCHING END ===
+
+function resolveObjectName(
+  objName: string,
+  objectRegistry: Array<{ name?: string; id?: string; object_id?: string }>
+): { name: string } | null {
+  const cleanName = objName.toLowerCase().trim();
+
+  // 1. Exact or substring match (as in original code)
+  const exactOrSub = objectRegistry.find(reg => {
+    const regName = (reg.name || '').toLowerCase().trim();
+    const regId = (reg.id || reg.object_id || '').toLowerCase().trim();
+    if (!regName) return false;
+    return cleanName.includes(regName) || regName.includes(cleanName) || (regId && (cleanName === regId || cleanName.includes(regId)));
+  });
+  if (exactOrSub) {
+    return { name: exactOrSub.name || exactOrSub.id || exactOrSub.object_id || objName };
+  }
+
+  // 2. Content-word overlap match fallback
+  const stopWords = new Set([
+    'and', 'the', 'in', 'of', 'a', 'an', 'with', 'at', 'on', 'for', 'by', 'to', 'from',
+    'various', 'some', 'several', 'or', 'massive', 'yellow', 'overhead', 'large',
+    'partially', 'assembled', 'unfinished', 'generic', 'unbranded', 'clean', 'nearly', 'complete',
+    'offshore', 'sea', 'system', 'network', 'many', 'new', 'old', 'modern', 'local',
+    'specialized', 'automated'
+  ]);
+
+  const stem = (w: string) => {
+    if (w.endsWith('ies')) return w.slice(0, -3) + 'y';
+    if (w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+    return w;
+  };
+
+  const getCleanWords = (s: string) => {
+    return s.toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .split(/\s+/)
+      .map(w => w.trim())
+      .filter(w => w.length > 1 && !stopWords.has(w))
+      .map(stem);
+  };
+
+  const wordsObj = getCleanWords(objName);
+  if (wordsObj.length === 0) return null;
+
+  let bestMatch: any = null;
+  let bestScore = 0;
+
+  for (const reg of objectRegistry) {
+    const regName = reg.name || reg.id || reg.object_id || '';
+    const wordsReg = getCleanWords(regName);
+    if (wordsReg.length === 0) continue;
+
+    const setReg = new Set(wordsReg);
+    let intersection = 0;
+    for (const w of wordsObj) {
+      if (setReg.has(w)) {
+        intersection++;
+      }
+    }
+
+    const maxLen = Math.max(wordsObj.length, wordsReg.length);
+    const score = intersection / maxLen;
+    // Score threshold: 0.25 (e.g. sharing at least 1 significant stem out of 4)
+    if (score >= 0.25 && score > bestScore) {
+      bestScore = score;
+      bestMatch = reg;
+    }
+  }
+
+  if (bestMatch) {
+    return { name: bestMatch.name || bestMatch.id || bestMatch.object_id || objName };
+  }
+
+  return null;
+}
 
 export class SceneAgent extends BaseAgent {
   constructor() {
@@ -264,6 +340,9 @@ export class SceneAgent extends BaseAgent {
       }
     }
 
+    const project = db.prepare('SELECT narration_language FROM projects WHERE id = ?').get(projectId) as { narration_language: string } | undefined;
+    const narrationLanguage = project?.narration_language || 'English';
+
     for (const scene of scenes) {
       scene.title = scene.title ?? '';
       let desc = stripNarrationMeta(scene.scene_description ?? '');
@@ -271,6 +350,9 @@ export class SceneAgent extends BaseAgent {
       scene.scene_description = desc;
       scene.continuity_notes = scene.continuity_notes ?? '';
       scene.narration_fragment = scene.narration_fragment ?? '';
+      if (scene.narration_fragment) {
+        scene.narration_fragment = normalizeTextNumbers(scene.narration_fragment, narrationLanguage);
+      }
       const snapshot = scene.visual_state_snapshot;
       if (!snapshot) continue;
 
@@ -326,25 +408,30 @@ export class SceneAgent extends BaseAgent {
           for (const obj of snapshot[key]) {
             if (typeof obj !== 'string') continue;
 
-            const match = bible.object_registry?.find(reg => {
-              const regName = (reg.name || '').toLowerCase().trim();
-              const regId = (reg.id || reg.object_id || '').toLowerCase().trim();
-              const objName = obj.toLowerCase().trim();
-              if (!regName) return false;
-              return objName.includes(regName) || regName.includes(objName) || (regId && (objName === regId || objName.includes(regId)));
+            // Check for generic human crew (workers, technicians, etc.)
+            const genericHumanKeywords = [
+              'worker', 'workers', 'technician', 'technicians', 'engineer', 'engineers',
+              'crew', 'staff', 'personnel', 'operator', 'operators', 'team', 'teams',
+              'people', 'person', 'personnel', 'employee', 'employees', 'mechanic', 'mechanics',
+              'workforce', 'laborer', 'laborers', 'staffer', 'staffers'
+            ];
+            const isGenericCrew = genericHumanKeywords.some(keyword => {
+              const objLower = obj.toLowerCase().trim();
+              const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+              return regex.test(objLower);
             });
 
-            if (match) {
-              const matchedName = match.name || match.id || match.object_id || obj;
-              normalizedObjects.push(matchedName);
-            } else {
-              const noteToAdd = `Auto-removed unregistered object: ${obj}. Register in Production Bible if needed.`;
-              if (scene.continuity_notes) {
-                scene.continuity_notes = `${scene.continuity_notes}\n${noteToAdd}`;
-              } else {
-                scene.continuity_notes = noteToAdd;
-              }
+            if (isGenericCrew) {
+              normalizedObjects.push(obj);
+              continue;
+            }
 
+            const match = resolveObjectName(obj, bible.object_registry || []);
+
+            if (match) {
+              normalizedObjects.push(match.name);
+            } else {
+              // Genuinely unregistered: remove from snapshot, log internally, but do NOT leak/write to scene.continuity_notes
               try {
                 db.prepare(`
                   INSERT INTO agent_logs (id, project_id, agent_name, model_used, status, input_prompt, output_response)
@@ -521,7 +608,7 @@ export class SceneAgent extends BaseAgent {
     }
 
     let system = getSceneSystemPrompt(narrationLanguage, profile, contentType);
-    const visualStatePrompt = `
+    let visualStatePrompt = `
 VISUAL STATE SNAPSHOT — REQUIRED FOR EVERY SCENE:
 At the end of each scene breakdown, provide a visual_state_snapshot that records the exact visual state at the END of this scene. This snapshot is passed to the next scene as its starting state.
 
@@ -538,7 +625,19 @@ Rules:
 - key_visible_objects: all significant props or objects visible in frame at scene end
 `;
 
-    const sequentialRulePrompt = `
+    if (profile.id === 'cinematic_series') {
+      visualStatePrompt += `
+- character_damage: mapping character IDs (e.g., CHAR_001) to descriptions of any visible injuries/wear (e.g. {"CHAR_001": "minor cuts on arm"})
+- costume_armor_state: mapping character IDs to clothing/armor condition (e.g. {"CHAR_001": "jacket torn at left sleeve"})
+- creature_states: list of creatures in the scene, each with:
+  - name: creature name matching the Production Bible registry
+  - status: "unharmed", "injured", "defeated", or "dead"
+  - powers_active: boolean indicating if their special abilities are active
+- environmental_destruction: description of any debris or damage caused to the location
+`;
+    }
+
+    let sequentialRulePrompt = `
 SCENE-TO-SCENE CONTINUITY RULE:
 When generating scenes sequentially within a phase, pass the previous scene's visual_state_snapshot as context to the next scene generation:
 
@@ -548,7 +647,18 @@ Location state: [previous snapshot location_state]
 Time of day: [previous snapshot time_of_day]
 Atmosphere: [previous snapshot atmosphere]
 Objects visible: [previous snapshot key_visible_objects]
+`;
 
+    if (profile.id === 'cinematic_series') {
+      sequentialRulePrompt += `
+Character damage: [previous character_damage summary]
+Costume/armor state: [previous costume_armor_state summary]
+Creature states: [previous creature_states summary]
+Environmental destruction: [previous environmental_destruction summary]
+`;
+    }
+
+    sequentialRulePrompt += `
 Your scene description must be visually continuous from this state. If your scene starts differently, you must write a brief transition in the scene_description field explaining what changed and why.
 `;
 
@@ -618,12 +728,23 @@ When referencing an object in visual_state_snapshot.key_objects_visible, use the
             const atmos = snapshot.atmosphere || snapshot.weather_or_atmosphere || '';
             const objs = (snapshot.key_visible_objects || snapshot.key_objects_visible || []).join(', ');
 
+            let cinematicState = '';
+            if (profile.id === 'cinematic_series') {
+              const dmg = snapshot.character_damage ? JSON.stringify(snapshot.character_damage) : 'None';
+              const arm = snapshot.costume_armor_state ? JSON.stringify(snapshot.costume_armor_state) : 'None';
+              const creatures = snapshot.creature_states && snapshot.creature_states.length > 0
+                ? snapshot.creature_states.map((cr: any) => `${cr.name} (${cr.status}, powers_active=${cr.powers_active ?? false})`).join(', ')
+                : 'None';
+              const dest = snapshot.environmental_destruction || 'None';
+              cinematicState = `\nCharacter damage: ${dmg}\nCostume/armor state: ${arm}\nCreature states: ${creatures}\nEnvironmental destruction: ${dest}`;
+            }
+
             previousSceneStateContext = `PREVIOUS SCENE VISUAL STATE (your scene 1 must begin from this state — do not contradict it):
 Characters: ${charsSummary || 'None'}
 Location state: ${locState}
 Time of day: ${tod}
 Atmosphere: ${atmos}
-Objects visible: ${objs}
+Objects visible: ${objs}${cinematicState}
 
 Your scene description must be visually continuous from this state. If your scene starts differently, you must write a brief transition in the scene_description field explaining what changed and why.`;
           }
@@ -958,6 +1079,9 @@ Please output a rewritten, elevated scene JSON with all fields intact, but the v
     config?: { temperature?: number; maxOutputTokens?: number },
     previousSnapshot?: any
   ): Promise<any> {
+    const project = db.prepare('SELECT content_profile FROM projects WHERE id = ?').get(projectId) as { content_profile?: string } | undefined;
+    const isCinematic = project?.content_profile === 'cinematic_series';
+
     let previousStateContext = '';
     if (previousSnapshot) {
       const chars = previousSnapshot.characters_present || [];
@@ -974,12 +1098,36 @@ Please output a rewritten, elevated scene JSON with all fields intact, but the v
       const atmos = previousSnapshot.atmosphere || previousSnapshot.weather_or_atmosphere || '';
       const objs = (previousSnapshot.key_visible_objects || previousSnapshot.key_objects_visible || []).join(', ');
 
+      let cinematicState = '';
+      if (isCinematic) {
+        const dmg = previousSnapshot.character_damage ? JSON.stringify(previousSnapshot.character_damage) : 'None';
+        const arm = previousSnapshot.costume_armor_state ? JSON.stringify(previousSnapshot.costume_armor_state) : 'None';
+        const creatures = previousSnapshot.creature_states && previousSnapshot.creature_states.length > 0
+          ? previousSnapshot.creature_states.map((cr: any) => `${cr.name} (${cr.status}, powers_active=${cr.powers_active ?? false})`).join(', ')
+          : 'None';
+        const dest = previousSnapshot.environmental_destruction || 'None';
+        cinematicState = `\nCharacter damage: ${dmg}\nCostume/armor state: ${arm}\nCreature states: ${creatures}\nEnvironmental destruction: ${dest}`;
+      }
+
       previousStateContext = `\nPREVIOUS SCENE VISUAL STATE (this scene begins from this state — do not contradict it unless the scene description explicitly transitions):
 Characters: ${charsSummary || 'None'}
 Location state: ${locState}
 Time of day: ${tod}
 Atmosphere: ${atmos}
-Objects visible: ${objs}`;
+Objects visible: ${objs}${cinematicState}`;
+    }
+
+    let extraSnapshotRules = '';
+    if (isCinematic) {
+      extraSnapshotRules = `
+- character_damage: mapping character IDs (e.g., CHAR_001) to descriptions of any visible injuries/wear (e.g. {"CHAR_001": "minor cuts on arm"})
+- costume_armor_state: mapping character IDs to clothing/armor condition (e.g. {"CHAR_001": "jacket torn at left sleeve"})
+- creature_states: list of creatures in the scene, each with:
+  - name: creature name matching the Production Bible registry
+  - status: "unharmed", "injured", "defeated", or "dead"
+  - powers_active: boolean indicating if their special abilities are active
+- environmental_destruction: description of any debris or damage caused to the location
+`;
     }
 
     const prompt = `You are a visual continuity supervisor. Analyze the following scene description and narration fragment, then extract the exact visual state at the END of this scene.
@@ -1005,7 +1153,7 @@ Rules:
 - location_state: describe any change to the location from its baseline e.g. 'market stall now crowded with 3 additional merchants', 'same as scene open'
 - time_of_day: must be consistent with the scene description
 - atmosphere: must be consistent with the scene description
-- key_visible_objects: all significant props or objects visible in frame at scene end (from the Bible's registered objects list if applicable, or objects present in the scene)
+- key_visible_objects: all significant props or objects visible in frame at scene end (from the Bible's registered objects list if applicable, or objects present in the scene)${extraSnapshotRules}
 
 You must return valid JSON matching the schema.`;
 

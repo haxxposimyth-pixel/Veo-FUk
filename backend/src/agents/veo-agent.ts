@@ -1,7 +1,7 @@
 import { BaseAgent } from './base-agent';
 import { StructuredOutputError } from '../utils/structured-output.error';
 import { getVeoSystemPrompt, getVeoUserPrompt } from '../prompts/veo.prompt';
-import { veoPromptAgentOutputSchema, VeoPromptData, VeoPrompt, veoAppearanceValidationSchema, veoPromptCompleteSchema, veoExtendedValidationSchema, narrationFitsDuration, getWordCount, getRequiredClipCount, splitNarrationIntoFragments, resolveLanguageRules, resolveContentProfile } from 'shared';
+import { veoPromptAgentOutputSchema, VeoPromptData, VeoPrompt, veoAppearanceValidationSchema, veoPromptCompleteSchema, veoExtendedValidationSchema, narrationFitsDuration, getWordCount, getRequiredClipCount, splitNarrationIntoFragments, resolveLanguageRules, resolveContentProfile, normalizeTextNumbers } from 'shared';
 // === VVS FIX 2 START ===
 import { numberToWords } from '../utils/veo-validation';
 import logger from '../utils/logger';
@@ -86,9 +86,10 @@ function validatePrompt(
     errors.push(`Visual has ${visualWords.length} words (must be 40-80 words)`);
   }
 
-  // 3. Arabic numeral check in Visual
-  if (/\d/.test(prompt.visual)) {
-    prompt.visual = prompt.visual.replace(/\b(\d+)\b/g, (match: string) => numberToWords(match));
+  // 3. Normalize numbers for narration only
+  if (typeof prompt.narration === 'string') {
+    const narrationLanguage = project.narration_language || 'English';
+    prompt.narration = normalizeTextNumbers(prompt.narration, narrationLanguage);
   }
 
   // 4. Avoid list checks
@@ -518,8 +519,9 @@ export class VeoAgent extends BaseAgent {
       phaseNumber?: number;
     },
     onChunk?: (chunk: string) => void,
+    agentNameOverride?: string,
   ): Promise<T> {
-    return super.generateStructured(projectId, apiKey, modelName, params, onChunk);
+    return super.generateStructured(projectId, apiKey, modelName, params, onChunk, agentNameOverride);
   }
 
   private async logToAgentLogs(log: {
@@ -569,7 +571,8 @@ export class VeoAgent extends BaseAgent {
     modelName?: string,
     config?: { temperature?: number; maxOutputTokens?: number; enableValidators?: boolean },
     onChunk?: (chunk: string) => void,
-    repairInstruction?: string
+    repairInstruction?: string,
+    assignedConstraints?: { cameraMove: string; shotSize: string }
   ): Promise<VeoPromptData> {
     let previousConnections: string[] = [];
     let previousCameras: string[] = [];
@@ -781,14 +784,26 @@ This content is appropriate for general family audiences.\n\n`;
       if (prevSceneRow) {
         const snapshot = prevSceneRow.visual_state_snapshot
           ? JSON.parse(prevSceneRow.visual_state_snapshot)
-          : (JSON.parse(prevSceneRow.raw_json).visual_state_snapshot || null);
+          : (prevSceneRow.raw_json ? (typeof prevSceneRow.raw_json === 'string' ? JSON.parse(prevSceneRow.raw_json).visual_state_snapshot : prevSceneRow.raw_json.visual_state_snapshot) : null);
 
         if (snapshot) {
           const charsList = (snapshot.characters_present || []).map((c: any) => 
             `- Character: ${c.character_id}\n  Position: ${c.current_position}\n  Props Held: ${(c.props_held || []).join(', ') || 'None'}\n  Physical Condition: ${c.physical_condition}\n  Facing: ${c.facing_direction}`
           ).join('\n');
           
-          const formattedSnapshot = `Characters Present:\n${charsList || 'None'}\nLocation State: ${snapshot.location_state || ''}\nTime of Day: ${snapshot.time_of_day || ''}\nAtmosphere: ${snapshot.weather_or_atmosphere || ''}\nKey Objects Visible: ${(snapshot.key_objects_visible || []).join(', ') || 'None'}`;
+          let formattedSnapshot = `Characters Present:\n${charsList || 'None'}\nLocation State: ${snapshot.location_state || ''}\nTime of Day: ${snapshot.time_of_day || ''}\nAtmosphere: ${snapshot.weather_or_atmosphere || ''}\nKey Objects Visible: ${(snapshot.key_objects_visible || []).join(', ') || 'None'}`;
+
+          if (contentProfile?.id === 'cinematic_series') {
+            const damageList = snapshot.character_damage ? Object.entries(snapshot.character_damage).map(([id, desc]) => `- Character ${id}: ${desc}`).join('\n') : '';
+            const costumeList = snapshot.costume_armor_state ? Object.entries(snapshot.costume_armor_state).map(([id, desc]) => `- Character ${id}: ${desc}`).join('\n') : '';
+            const creatureList = snapshot.creature_states ? snapshot.creature_states.map((c: any) => `- ${c.name}: status=${c.status}, powers_active=${c.powers_active ?? 'N/A'}`).join('\n') : '';
+            const envDestruction = snapshot.environmental_destruction || '';
+
+            formattedSnapshot += `\nCharacter Damage/Injuries:\n${damageList || 'None'}`;
+            formattedSnapshot += `\nCostume/Armor State:\n${costumeList || 'None'}`;
+            formattedSnapshot += `\nCreature/Monster States:\n${creatureList || 'None'}`;
+            formattedSnapshot += `\nEnvironmental Destruction:\n${envDestruction || 'None'}`;
+          }
 
           sceneContinuityBlock = `SCENE CONTINUITY STATE — previous scene ended with:\n${formattedSnapshot}\nYour visual description must be physically continuous from this state. Characters must be in the positions, holding the props, and facing the directions described above unless this scene explicitly transitions them.`;
         }
@@ -817,7 +832,9 @@ The previous scene in this location used ${prevKelvin}K lighting. Your lighting 
       previousLightings,
       previousVisual,
       emotionalArcContext,
-      shotDiversityConstraint
+      shotDiversityConstraint,
+      contentProfile,
+      assignedConstraints
     );
     // === VVS OPT FIX-1A END ===
     let fullPrompt = `${system}\n\n${user}`;
@@ -1252,9 +1269,7 @@ CRITICAL OUTPUT CONSTRAINT: The 'suggestion' field for each violation must be no
 }
 - If violation is false, the violations array should be empty.`;
 
-    const originalAgentName = (this as any).agentName;
     try {
-      (this as any).agentName = 'VeoAgent_AppearanceValidator';
       const validationResult = await this.generateStructured<any>(
         projectId,
         apiKey,
@@ -1265,14 +1280,14 @@ CRITICAL OUTPUT CONSTRAINT: The 'suggestion' field for each violation must be no
           temperature: 0,
           maxOutputTokens: 800,
           phaseNumber: phaseNumber,
-        }
+        },
+        undefined,
+        'VeoAgent_AppearanceValidator'
       );
       return validationResult;
     } catch (valErr: any) {
       console.error(`[VeoAgent] Error during appearance/style validation:`, valErr);
       return { violation: false, violations: [] };
-    } finally {
-      (this as any).agentName = originalAgentName;
     }
   }
 
@@ -1306,9 +1321,7 @@ CRITICAL CONSTRAINTS:
   "rewritten_narration": "the rewritten narration text"
 }`;
 
-    const originalAgentName = (this as any).agentName;
     try {
-      (this as any).agentName = 'VeoAgent_NarrationFit';
       const result = await this.generateStructured<{ rewritten_narration: string }>(
         projectId,
         apiKey,
@@ -1318,15 +1331,15 @@ CRITICAL CONSTRAINTS:
           schema: z.object({ rewritten_narration: z.string().min(1) }),
           temperature: 0.2,
           phaseNumber: phaseNumber,
-        }
+        },
+        undefined,
+        'VeoAgent_NarrationFit'
       );
       if (result && result.rewritten_narration) {
         return result.rewritten_narration;
       }
     } catch (err: any) {
       console.error(`[VeoAgent] Narration fit rewrite failed:`, err);
-    } finally {
-      (this as any).agentName = originalAgentName;
     }
     return originalNarration;
   }
@@ -1387,9 +1400,7 @@ INSTRUCTIONS:
   ${prevPrompt ? '"connection_prev": "transition description string from Shot 1 to Shot 2",\n' : ''}  "connection_curr": "transition description string from Shot 2 to Shot 3"${nextPrompt ? ',\n  "connection_next": "transition description string from Shot 3 to next shot"' : ''}
 }`;
 
-    const originalAgentName = (this as any).agentName;
     try {
-      (this as any).agentName = 'VeoAgent_ConnectionReconciliation';
       const schemaFields: any = {
         connection_curr: z.string().min(1)
       };
@@ -1408,7 +1419,9 @@ INSTRUCTIONS:
           prompt: contextPrompt,
           schema: z.object(schemaFields),
           temperature: 0.2,
-        }
+        },
+        undefined,
+        'VeoAgent_ConnectionReconciliation'
       );
       return result;
     } catch (err: any) {
@@ -1416,8 +1429,6 @@ INSTRUCTIONS:
       return {
         connection_curr: currPrompt.connection || 'None'
       };
-    } finally {
-      (this as any).agentName = originalAgentName;
     }
   }
 
@@ -1436,6 +1447,7 @@ INSTRUCTIONS:
     apiKey: string | undefined,
     enableValidators: boolean = true
   ): Promise<any> {
+    const contentProfile = resolveContentProfile(project.content_profile || 'viral_story');
     // Resolve scene metadata from raw_json in DB for character ids, objects, dialogue, time of day
     if (data.visual) {
       let visualTrimmed = data.visual.trim();
@@ -1544,34 +1556,64 @@ INSTRUCTIONS:
 
     // Programmatic cleanup of vague motion/invisible-change descriptors if LLM generated them
     if (data.visual) {
-      data.visual = data.visual
-        .replace(/\bimperceptibly\b/gi, 'visibly')
-        .replace(/\b(subtle|subtly)\b/gi, '')
-        .replace(/\bseamlessly\b/gi, '')
-        .replace(/\bseamless\b/gi, '')
-        .replace(/\bcomplex\b/gi, 'detailed')
-        .replace(/\bprofound\b/gi, '')
-        .replace(/\bdynamic data\b/gi, 'abstract shapes')
-        .replace(/\b(blurred|unreadable) (text|numbers|labels)\b/gi, 'no text or numbers; abstract/symbolic graphics only — no readable UI labels')
-        .replace(/\b(beautiful(?:ly)?|stunning(?:ly)?|majestic(?:ally)?|breathtaking(?:ly)?|epic(?:ally)?|gorgeous(?:ly)?|mesmerizing(?:ly)?|captivating(?:ly)?|dramatic(?:ally)?)\b/gi, '')
-        .replace(/\blarge-format sensor\b/gi, 'camera')
-        .replace(/\b(high dynamic range|HDR|cinematic color grading|color grading|photorealistic CGI integration|maintains visual fidelity|visual fidelity|rendered with realistic textures|documentary aesthetic)\b/gi, '')
-        .replace(/\s+/g, ' ')
-        .replace(/\s+([.,!?])/g, '$1')
-        .replace(/,\s*,+/g, ',')
-        .replace(/\b(with|by|using)\s+(a|an|the)?\s*,\s*(conveying|showing|revealing|emphasizing|highlighting|pointing|facing|displaying|reflecting|capturing|having|featuring)\b/gi, ', $3')
-        .replace(/\b(and|or|with|by|using|a|an|the)(?:\s+(?:and|or|with|by|using|a|an|the))*\s*(?=[.,!?])/gi, '')
-        .replace(/\b(a|an)\s*,\s*and\b/gi, '$1')
-        .replace(/\b(a|an)\s*,\s*/gi, '$1 ')
-        .replace(/\bwith\s+and\b/gi, 'with')
-        .replace(/\bwith\s+a\s+and\b/gi, 'with a')
-        .replace(/\bwith\s*,\s*and\b/gi, 'with')
-        .replace(/\bwith\s*,\s*/gi, 'with ')
-        .replace(/,\s*and\s*\./gi, '.')
-        .replace(/,\s*\./gi, '.')
-        .replace(/\s+/g, ' ')
-        .replace(/\s+([.,!?])/g, '$1')
-        .trim();
+      if (contentProfile?.id === 'cinematic_series') {
+        data.visual = data.visual
+          .replace(/\bimperceptibly\b/gi, 'visibly')
+          .replace(/\b(subtle|subtly)\b/gi, '')
+          .replace(/\bseamlessly\b/gi, '')
+          .replace(/\bseamless\b/gi, '')
+          .replace(/\bcomplex\b/gi, 'detailed')
+          .replace(/\bprofound\b/gi, '')
+          .replace(/\bdynamic data\b/gi, 'abstract shapes')
+          .replace(/\b(blurred|unreadable) (text|numbers|labels)\b/gi, 'no text or numbers; abstract/symbolic graphics only — no readable UI labels')
+          .replace(/\bdocumentary aesthetic\b/gi, '')
+          .replace(/\blarge-format sensor\b/gi, 'camera')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+([.,!?])/g, '$1')
+          .replace(/,\s*,+/g, ',')
+          .replace(/\b(with|by|using)\s+(a|an|the)?\s*,\s*(conveying|showing|revealing|emphasizing|highlighting|pointing|facing|displaying|reflecting|capturing|having|featuring)\b/gi, ', $3')
+          .replace(/\b(and|or|with|by|using|a|an|the)(?:\s+(?:and|or|with|by|using|a|an|the))*\s*(?=[.,!?])/gi, '')
+          .replace(/\b(a|an)\s*,\s*and\b/gi, '$1')
+          .replace(/\b(a|an)\s*,\s*/gi, '$1 ')
+          .replace(/\bwith\s+and\b/gi, 'with')
+          .replace(/\bwith\s+a\s+and\b/gi, 'with a')
+          .replace(/\bwith\s*,\s*and\b/gi, 'with')
+          .replace(/\bwith\s*,\s*/gi, 'with ')
+          .replace(/,\s*and\s*\./gi, '.')
+          .replace(/,\s*\./gi, '.')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+([.,!?])/g, '$1')
+          .trim();
+      } else {
+        data.visual = data.visual
+          .replace(/\bimperceptibly\b/gi, 'visibly')
+          .replace(/\b(subtle|subtly)\b/gi, '')
+          .replace(/\bseamlessly\b/gi, '')
+          .replace(/\bseamless\b/gi, '')
+          .replace(/\bcomplex\b/gi, 'detailed')
+          .replace(/\bprofound\b/gi, '')
+          .replace(/\bdynamic data\b/gi, 'abstract shapes')
+          .replace(/\b(blurred|unreadable) (text|numbers|labels)\b/gi, 'no text or numbers; abstract/symbolic graphics only — no readable UI labels')
+          .replace(/\b(beautiful(?:ly)?|stunning(?:ly)?|majestic(?:ally)?|breathtaking(?:ly)?|epic(?:ally)?|gorgeous(?:ly)?|mesmerizing(?:ly)?|captivating(?:ly)?|dramatic(?:ally)?)\b/gi, '')
+          .replace(/\blarge-format sensor\b/gi, 'camera')
+          .replace(/\b(high dynamic range|HDR|cinematic color grading|color grading|photorealistic CGI integration|maintains visual fidelity|visual fidelity|rendered with realistic textures|documentary aesthetic)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+([.,!?])/g, '$1')
+          .replace(/,\s*,+/g, ',')
+          .replace(/\b(with|by|using)\s+(a|an|the)?\s*,\s*(conveying|showing|revealing|emphasizing|highlighting|pointing|facing|displaying|reflecting|capturing|having|featuring)\b/gi, ', $3')
+          .replace(/\b(and|or|with|by|using|a|an|the)(?:\s+(?:and|or|with|by|using|a|an|the))*\s*(?=[.,!?])/gi, '')
+          .replace(/\b(a|an)\s*,\s*and\b/gi, '$1')
+          .replace(/\b(a|an)\s*,\s*/gi, '$1 ')
+          .replace(/\bwith\s+and\b/gi, 'with')
+          .replace(/\bwith\s+a\s+and\b/gi, 'with a')
+          .replace(/\bwith\s*,\s*and\b/gi, 'with')
+          .replace(/\bwith\s*,\s*/gi, 'with ')
+          .replace(/,\s*and\s*\./gi, '.')
+          .replace(/,\s*\./gi, '.')
+          .replace(/\s+/g, ' ')
+          .replace(/\s+([.,!?])/g, '$1')
+          .trim();
+      }
 
       // Clean up dangling or mismatched a/an articles after stripping adjectives
       data.visual = data.visual
@@ -1729,81 +1771,74 @@ INSTRUCTIONS:
       return o ? `${o.name} ${o.description}`.toLowerCase() : '';
     }).join(' ');
 
-    const isInterior = 
-      locType.includes('interior') || 
-      locType === 'interior' || 
-      sceneLocDesc.includes('interior') || 
-      sceneDesc.includes('interior') || 
-      sceneDesc.includes('inside the') || 
-      sceneDesc.includes('within the') || 
-      sceneDesc.includes('cabin') || 
-      locName.includes('cabin') || 
-      locDesc.includes('cabin') || 
-      sceneLocDesc.includes('cabin');
+    const resolvedSetting = loc?.setting ? String(loc.setting).toLowerCase().trim() : null;
+    let isInterior = false;
+
+    if (resolvedSetting === 'interior') {
+      isInterior = true;
+    } else if (resolvedSetting === 'exterior') {
+      isInterior = false;
+    } else {
+      // Fallback: Expanded keyword heuristic
+      const indoorKeywords = [
+        'interior', 'inside', 'within', 'cabin', 'indoor', 'indoors',
+        'factory', 'bay', 'assembly', 'hangar', 'station', 'zone',
+        'workshop', 'room', 'office', 'hall', 'laboratory', 'lab',
+        'facility', 'warehouse', 'enclosed', 'studio', 'cleanroom'
+      ];
+      
+      const textToSearch = [
+        locType,
+        locName,
+        locDesc,
+        loc?.visual_signature || '',
+        loc?.atmosphere || '',
+        loc?.lighting_notes || '',
+        sceneLocDesc,
+        sceneDesc
+      ].join(' ').toLowerCase();
+
+      isInterior = indoorKeywords.some(keyword => textToSearch.includes(keyword));
+    }
 
     let finalLightingStr = '';
     if (isInterior) {
-      let interiorLightingType: 'control' | 'screen' | 'engine' | 'cgi' | 'generic' = 'generic';
-
-      if (
-        locName.includes('screen') || locDesc.includes('screen') || sceneLocDesc.includes('screen') || sceneDesc.includes('screen') ||
-        locName.includes('console') || locDesc.includes('console') || sceneLocDesc.includes('console') || sceneDesc.includes('console') ||
-        objectsText.includes('screen') || objectsText.includes('console') || objectsText.includes('monitor') || objectsText.includes('display') || objectsText.includes('ui')
-      ) {
-        interiorLightingType = 'screen';
-      } else if (
-        locName.includes('control') || locDesc.includes('control') || sceneLocDesc.includes('control') ||
-        locName.includes('ballast') || locDesc.includes('ballast') || sceneLocDesc.includes('ballast') ||
-        locName.includes('bridge') || locDesc.includes('bridge') || sceneLocDesc.includes('bridge') ||
-        locName.includes('cabin') || locDesc.includes('cabin') || sceneLocDesc.includes('cabin')
-      ) {
-        interiorLightingType = 'control';
-      } else if (
-        locName.includes('pump') || locDesc.includes('pump') || sceneLocDesc.includes('pump') ||
-        locName.includes('engine') || locDesc.includes('engine') || sceneLocDesc.includes('engine') ||
-        locName.includes('machinery') || locDesc.includes('machinery') || sceneLocDesc.includes('machinery') ||
-        locName.includes('generator') || locDesc.includes('generator') || sceneLocDesc.includes('generator') ||
-        objectsText.includes('engine') || objectsText.includes('pump') || objectsText.includes('machinery')
-      ) {
-        interiorLightingType = 'engine';
-      } else if (
-        locName.includes('cgi') || locDesc.includes('cgi') || sceneLocDesc.includes('cgi') ||
-        sceneDesc.includes('cgi') || sceneDesc.includes('cutaway') || sceneDesc.includes('diagram') ||
-        sceneDesc.includes('schematic') || sceneDesc.includes('cross-section') || sceneDesc.includes('internal view')
-      ) {
-        interiorLightingType = 'cgi';
+      // Build base lighting
+      let baseLighting = loc?.lighting_notes || bible.visual_style_lock?.lighting_style || "Neutral indoor illumination";
+      baseLighting = baseLighting.trim();
+      if (!baseLighting.endsWith('.')) {
+        baseLighting += '.';
       }
 
-      const INTERIOR_LIGHTING_PROFILES = {
-        control: {
-          lighting_desc: "cool screen glow with dim overhead LEDs",
-          mood: "tense, focused",
-          palette: "#2d3748, #4a5568, #1a202c, #a0aec0"
-        },
-        screen: {
-          lighting_desc: "blue UI glow, casting dark-room falloff",
-          mood: "precise, clinical",
-          palette: "#0b192c, #1e3e62, #000000, #008dff"
-        },
-        engine: {
-          lighting_desc: "cool industrial LEDs, casting hard metal highlights",
-          mood: "relentless, industrial",
-          palette: "#718096, #2d3748, #1a202c, #e2e8f0"
-        },
-        cgi: {
-          lighting_desc: "neutral cinematic, technical lighting",
-          mood: "clean, technical",
-          palette: "#4a5568, #cbd5e0, #2d3748, #ffffff"
-        },
-        generic: {
-          lighting_desc: "neutral indoor illumination from recessed ceiling lights",
-          mood: "neutral",
-          palette: "#ffffff, #e2e8f0, #4a5568, #1a202c"
-        }
-      };
+      // Check for screen/console/monitor
+      const hasScreen = 
+        locName.includes('screen') || locDesc.includes('screen') || sceneLocDesc.includes('screen') || sceneDesc.includes('screen') ||
+        locName.includes('console') || locDesc.includes('console') || sceneLocDesc.includes('console') || sceneDesc.includes('console') ||
+        objectsText.includes('screen') || objectsText.includes('console') || objectsText.includes('monitor') || objectsText.includes('display') || objectsText.includes('ui');
 
-      const profile = INTERIOR_LIGHTING_PROFILES[interiorLightingType];
-      finalLightingStr = `${profile.lighting_desc}. Mood: ${profile.mood}. Ambient palette: ${profile.palette}. ${lookStr}.`;
+      // Add subtle local screen accent if present (does not hijack mood or main lighting)
+      let screenAccent = '';
+      if (hasScreen) {
+        screenAccent = " Accented by a subtle, local glow from the monitors.";
+      }
+
+      // Derive mood from bible tone/color_mood + scene emotional_beat
+      const tonePart = bible.visual_style_lock?.color_mood || bible.meta?.tone || "neutral";
+      const beatPart = resolvedScene.emotional_beat || "";
+      const rawMood = beatPart ? `${beatPart.trim()}, ${tonePart.trim()}` : tonePart;
+      const derivedMood = rawMood
+        .split(',')
+        .map((s: string) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i)
+        .join(', ');
+
+      // Use consistent ambient palette from bible's color_palette or fallback
+      const interiorPalette = Array.isArray(bible.visual_style_lock?.color_palette) && bible.visual_style_lock.color_palette.length > 0
+        ? bible.visual_style_lock.color_palette.join(', ')
+        : "#ffffff, #e2e8f0, #4a5568, #1a202c";
+
+      finalLightingStr = `${baseLighting}${screenAccent} Mood: ${derivedMood}. Ambient palette: ${interiorPalette}. ${lookStr}.`;
     } else {
       finalLightingStr = `${todLighting.color_temperature_kelvin} light from ${todLighting.sun_position}, casting ${todLighting.shadow_quality}. Mood: ${todLighting.mood}. Ambient palette: ${ambientPalette}. ${lookStr}.`;
     }
@@ -2001,12 +2036,31 @@ INSTRUCTIONS:
       );
     }
 
+    const cinematicBaseline: string[] = [];
+    if (contentProfile?.id === 'cinematic_series') {
+      cinematicBaseline.push(
+        'franchise characters',
+        'copyrighted designs',
+        'Marvel',
+        'DC',
+        'Godzilla',
+        'Jurassic Park',
+        'Star Wars',
+        'Disney',
+        'Nintendo',
+        'Pokeball',
+        'copyrighted logos',
+        'trademarked characters'
+      );
+    }
+
     const mergedList: string[] = [];
     const seen = new Set<string>();
 
     const allToMerge = [
       ...anatomyBaseline,
       ...characterBaseline,
+      ...cinematicBaseline,
       ...additionalAvoids,
       ...sceneSpecificList,
       ...styleAvoids,
@@ -2324,18 +2378,28 @@ export function assembleVeoFullPrompt(prompt: VeoPrompt | any, index: number, sc
   }
   const lines = [
     `Prompt ${index}:`,
-    `Visual: ${prompt.visual}`,
+    `Visual: ${prompt.visual}`
+  ];
+  if (prompt.action_arc) {
+    lines.push(`Action: ${prompt.action_arc}`);
+  }
+  lines.push(
     `Shot: ${shotField}`,
     `Lens: ${prompt.lens}`,
     `Lighting: ${prompt.lighting}`,
-    `Camera: ${prompt.camera}`,
+    `Camera: ${prompt.camera}`
+  );
+  if (prompt.in_clip_transition && prompt.in_clip_transition !== '' && prompt.in_clip_transition.toLowerCase() !== 'none') {
+    lines.push(`In-Clip Transition: ${prompt.in_clip_transition}`);
+  }
+  lines.push(
     `Duration: ${prompt.duration_seconds || 8}s`,
     `Ambient Sound: ${prompt.ambient_sound}`,
     `SFX: ${prompt.sfx}`,
     `Avoid: ${prompt.avoid}`,
     `Connection: ${prompt.connection}`,
     narrationLine
-  ];
+  );
   if (!isNarrationOnly) {
     lines.push(`Dialogue: ${prompt.dialogue}`);
   }

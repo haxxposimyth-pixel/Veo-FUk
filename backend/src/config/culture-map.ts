@@ -35,12 +35,12 @@ export function buildCulturalInstruction(language: string): string {
   const ctx = getCulturalContext(language);
   if (!ctx) return '';
   return [
-    '===== CULTURAL SETTING (NON-NEGOTIABLE) =====',
-    `Narration language is "${language}", so set the ENTIRE video in a ${ctx.region} cultural context. Apply to ALL characters, locations, and objects:`,
-    `- Characters: people of ${ctx.region} with region-appropriate appearance/ethnicity. Use authentic ${ctx.region} names in LATIN SCRIPT ONLY (e.g., ${ctx.exampleNames}). Do NOT use Western names like Alex/John/Emily unless the topic explicitly requires a foreign character. NEVER use non-Latin script for names.`,
+    '===== CULTURAL SETTING (CONDITIONAL DEFAULT) =====',
+    `Narration language is "${language}". UNLESS the video's subject or Title Seed specifies or implies its own country, region, or locale (in which case that subject geography takes precedence), set the cultural backdrop of the ENTIRE video to a ${ctx.region} context. Apply to ALL characters, locations, and objects:`,
+    `- Characters: people of ${ctx.region} with region-appropriate appearance/ethnicity. Use authentic ${ctx.region} names in LATIN SCRIPT ONLY (e.g., ${ctx.exampleNames}). Do NOT use Western names like Alex/John/Emily unless the topic/geography explicitly requires it. NEVER use non-Latin script for names.`,
     `- Clothing, food, props, signage, branding: region-appropriate to ${ctx.region}.`,
     `- Locations & environment: ${ctx.region} architecture, streets, vehicles, businesses, landscape.`,
     `- DESCRIBE EVERYTHING IN ENGLISH. The cultural setting changes WHO and WHAT appears — NOT the language of the description. Only the narration is in "${language}".`,
-    '=============================================',
+    '==================================================',
   ].join('\n');
 }

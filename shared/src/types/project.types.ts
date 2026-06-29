@@ -58,6 +58,25 @@ export interface ModelUsage {
 
 export type ProjectStatus = 'setup' | 'planning' | 'bible' | 'script' | 'scenes' | 'prompts' | 'complete';
 
+export interface MovieConfig {
+  format: 'single_movie' | 'episode_series' | 'season_based_series';
+  genre: string;
+  tone: string[];
+  story_engine_focus: {
+    combat: boolean;
+    world_exploration: boolean;
+    monster_action: boolean;
+    hero_journey: boolean;
+    season_continuity: boolean;
+  };
+  season_number?: number;
+  episode_number?: number;
+  hero_idea?: string;
+  villain_idea?: string;
+  world_idea?: string;
+  creature_idea?: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -75,6 +94,7 @@ export interface Project {
   concept_brief?: string;
   style_id?: string;
   target_duration_minutes?: number;
+  movie_config?: MovieConfig;
 }
 
 // ─── Production Bible ─────────────────────────────────────────────────────────

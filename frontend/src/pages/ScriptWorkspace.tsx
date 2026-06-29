@@ -649,6 +649,10 @@ export const ScriptWorkspace: React.FC = () => {
                 <option value="tutorial">Tutorial</option>
                 <option value="listicle">Listicle</option>
                 <option value="narrative_fiction">Narrative Fiction</option>
+                <option value="episodic_animated_story">Episodic Animated Story</option>
+                <option value="kids_educational_story">Kids Educational / Cartoon Story</option>
+                <option value="historical_deep_dive">Historical Deep-Dive / Mini-Doc</option>
+                <option value="vlog_day_in_life">Vlog / Day-in-the-Life</option>
               </select>
             </div>
           </Card>

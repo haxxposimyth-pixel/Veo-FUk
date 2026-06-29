@@ -5,12 +5,12 @@ import {
   getConceptUserPrompt,
   getConceptTopicOnlyPrompt,
 } from '../prompts/concept.prompt';
-import { conceptAgentOutputSchema, conceptTopicOnlySchema } from 'shared';
+import { conceptAgentOutputSchema, conceptTopicOnlySchema, cleanTopicScaffolding } from 'shared';
 import type { ConceptBrief } from 'shared';
 import { GeminiService } from '../services/gemini.service';
 import { SettingsRepository } from '../db/repositories/settings.repo';
 import { AGENT_MODEL_MAPPING } from '../config/agent-model-mapping';
-
+import db from '../db/connection';
 
 export class ConceptAgent extends BaseAgent {
   constructor() {
@@ -24,6 +24,8 @@ export class ConceptAgent extends BaseAgent {
     length: string = '',
     apiKey?: string,
     onChunk?: (chunk: string) => void,
+    contentProfile?: string,
+    contentType?: string,
   ): Promise<ConceptBrief> {
     const resolvedModel = AGENT_MODEL_MAPPING['ConceptAgent'] || 'gemini-2.5-pro';
     const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
@@ -32,7 +34,17 @@ export class ConceptAgent extends BaseAgent {
     let groundedFacts: string | null = null;
     try {
       onChunk?.('Researching facts…\n');
+      const settings = SettingsRepository.getSettings();
+      const isVertex = settings.vertexEnabled === true;
+      const gcpProjectId = settings.gcpProjectId;
+      const gcpLocation = settings.gcpLocation || 'us-central1';
+
       const geminiService = new GeminiService(activeApiKey);
+      if (isVertex && gcpProjectId) {
+        geminiService.initVertexAI(gcpProjectId, gcpLocation);
+      } else {
+        console.warn(`[ConceptAgent] Grounding search skipped due to missing or disabled GCP config (vertexEnabled: ${isVertex}, gcpProjectId: ${gcpProjectId})`);
+      }
       const researchPrompt = getConceptResearchPrompt(title, language, audience);
       const researchResult = await geminiService.generateGroundedText(resolvedModel, researchPrompt, activeApiKey);
       if (researchResult) {
@@ -43,12 +55,31 @@ export class ConceptAgent extends BaseAgent {
       console.warn(`[ConceptAgent] Grounded research failed, falling back to LLM knowledge:`, researchErr);
     }
 
+    // Try to load content_profile, content_type and movie_config if project already exists in DB
+    let resolvedContentProfile = contentProfile;
+    let resolvedContentType = contentType;
+    let movieConfig: any = undefined;
+    try {
+      const row = db.prepare('SELECT * FROM projects WHERE title = ? OR topic = ? ORDER BY updated_at DESC LIMIT 1').get(title, title) as any;
+      if (row) {
+        if (!resolvedContentProfile) {
+          resolvedContentProfile = row.content_profile;
+        }
+        if (!resolvedContentType) {
+          resolvedContentType = row.content_type;
+        }
+        movieConfig = row.movie_config ? JSON.parse(row.movie_config) : undefined;
+      }
+    } catch (e) {
+      // Non-fatal
+    }
+
     // Step 2: Generate brief using prompt
     onChunk?.('Writing brief…\n');
-    const systemPrompt = getConceptSystemPrompt(language);
-    const userPrompt = getConceptUserPrompt(title, language, audience, length, groundedFacts);
+    const systemPrompt = getConceptSystemPrompt(language, resolvedContentProfile, movieConfig, resolvedContentType);
+    const userPrompt = getConceptUserPrompt(title, language, audience, length, groundedFacts, resolvedContentProfile, movieConfig, resolvedContentType);
 
-    return this.generateStructured<ConceptBrief>(
+    const brief = await this.generateStructured<ConceptBrief>(
       null, // projectId is null for new projects
       activeApiKey,
       resolvedModel,
@@ -61,6 +92,11 @@ export class ConceptAgent extends BaseAgent {
       },
       onChunk
     );
+
+    if (brief && typeof brief.project_topic === 'string') {
+      brief.project_topic = cleanTopicScaffolding(brief.project_topic);
+    }
+    return brief;
   }
 
   async regenerateTopic(
@@ -69,6 +105,8 @@ export class ConceptAgent extends BaseAgent {
     language: string = 'English',
     audience: string = '',
     apiKey?: string,
+    contentProfile?: string,
+    contentType?: string,
   ): Promise<any> {
     const resolvedModel = AGENT_MODEL_MAPPING['ConceptAgent'] || 'gemini-2.5-pro';
     const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
@@ -76,7 +114,17 @@ export class ConceptAgent extends BaseAgent {
     // Grounded facts for regeneration (best-effort)
     let groundedFacts: string | null = null;
     try {
+      const settings = SettingsRepository.getSettings();
+      const isVertex = settings.vertexEnabled === true;
+      const gcpProjectId = settings.gcpProjectId;
+      const gcpLocation = settings.gcpLocation || 'us-central1';
+
       const geminiService = new GeminiService(activeApiKey);
+      if (isVertex && gcpProjectId) {
+        geminiService.initVertexAI(gcpProjectId, gcpLocation);
+      } else {
+        console.warn(`[ConceptAgent] Grounding search skipped during regeneration due to missing or disabled GCP config (vertexEnabled: ${isVertex}, gcpProjectId: ${gcpProjectId})`);
+      }
       const researchPrompt = getConceptResearchPrompt(chosenTitle, language, audience);
       const researchResult = await geminiService.generateGroundedText(resolvedModel, researchPrompt, activeApiKey);
       if (researchResult) {
@@ -86,10 +134,29 @@ export class ConceptAgent extends BaseAgent {
       console.warn(`[ConceptAgent] Grounded research failed during regeneration:`, err);
     }
 
-    const systemPrompt = getConceptSystemPrompt(language);
-    const userPrompt = getConceptTopicOnlyPrompt(title, chosenTitle, language, audience, groundedFacts);
+    // Try to load content_profile, content_type and movie_config if project already exists in DB
+    let resolvedContentProfile = contentProfile;
+    let resolvedContentType = contentType;
+    let movieConfig: any = undefined;
+    try {
+      const row = db.prepare('SELECT * FROM projects WHERE title = ? OR topic = ? ORDER BY updated_at DESC LIMIT 1').get(title, title) as any;
+      if (row) {
+        if (!resolvedContentProfile) {
+          resolvedContentProfile = row.content_profile;
+        }
+        if (!resolvedContentType) {
+          resolvedContentType = row.content_type;
+        }
+        movieConfig = row.movie_config ? JSON.parse(row.movie_config) : undefined;
+      }
+    } catch (e) {
+      // Non-fatal
+    }
 
-    return this.generateStructured<any>(
+    const systemPrompt = getConceptSystemPrompt(language, resolvedContentProfile, movieConfig, resolvedContentType);
+    const userPrompt = getConceptTopicOnlyPrompt(title, chosenTitle, language, audience, groundedFacts, resolvedContentProfile, movieConfig, resolvedContentType);
+
+    const updated = await this.generateStructured<any>(
       null,
       activeApiKey,
       resolvedModel,
@@ -101,8 +168,12 @@ export class ConceptAgent extends BaseAgent {
         maxOutputTokens: 4000,
       }
     );
+
+    if (updated && typeof updated.project_topic === 'string') {
+      updated.project_topic = cleanTopicScaffolding(updated.project_topic);
+    }
+    return updated;
   }
 }
 
 export const conceptAgent = new ConceptAgent();
-

@@ -134,7 +134,9 @@ export abstract class BaseAgent {
       phaseNumber?: number;
     },
     onChunk?: (chunk: string) => void,
+    agentNameOverride?: string,
   ): Promise<T> {
+    const agentName = agentNameOverride ?? this.agentName ?? this.constructor.name;
     const model = modelName ?? this.defaultModel;
     let actualModel = model;
     const startTime = Date.now();
@@ -159,7 +161,7 @@ export abstract class BaseAgent {
       let streamError: any = null;
       try {
         routerResult = await LLMRouter.generateStream(
-          this.agentName,
+          agentName,
           fullPrompt,
           (chunk) => {
             rawResponseText += chunk;
@@ -199,7 +201,7 @@ export abstract class BaseAgent {
         writeAgentLog({
           id: logId,
           project_id: projectId,
-          agent_name: this.agentName,
+          agent_name: agentName,
           model_used: actualModel,
           input_tokens: inputTokens,
           output_tokens: null,
@@ -260,7 +262,7 @@ export abstract class BaseAgent {
           writeAgentLog({
             id: logId,
             project_id: projectId,
-            agent_name: this.agentName,
+            agent_name: agentName,
             model_used: actualModel,
             input_tokens: inputTokens,
             output_tokens: outputTokens,
@@ -331,13 +333,13 @@ export abstract class BaseAgent {
               console.warn(
                 `[BaseAgent] WARNING: repair prompt (${repairTokenEstimate} est. tokens) ` +
                 `is LARGER than original (${originalTokenEstimate} est. tokens). ` +
-                `Check extractSchemaSummary for agent: ${this.agentName}`
+                `Check extractSchemaSummary for agent: ${agentName}`
               );
             }
           }
           // === VVS OPT FIX-9 ASSERTION END ===
           
-          console.warn(`[BaseAgent] ${this.agentName} JSON validation failed on attempt ${attempt}. Retrying with repair prompt. Error: ${zodErrorsText}`);
+          console.warn(`[BaseAgent] ${agentName} JSON validation failed on attempt ${attempt}. Retrying with repair prompt. Error: ${zodErrorsText}`);
         } else if (isRootExpectedObjectArray) {
           throw err;
         }
@@ -377,7 +379,7 @@ export abstract class BaseAgent {
     writeAgentLog({
       id: logId,
       project_id: projectId,
-      agent_name: this.agentName,
+      agent_name: agentName,
       model_used: actualModel,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
@@ -398,11 +400,11 @@ export abstract class BaseAgent {
     });
 
     throw new StructuredOutputError({
-      agentName: this.agentName,
+      agentName: agentName,
       attemptCount: maxAttempts,
       zodIssues,
       rawOutput: rawResponseText,
-      message: `Schema validation failed after ${maxAttempts} attempts for agent ${this.agentName}: ${errorMsg}`
+      message: `Schema validation failed after ${maxAttempts} attempts for agent ${agentName}: ${errorMsg}`
     });
   }
 

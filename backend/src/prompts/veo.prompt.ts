@@ -1,32 +1,71 @@
 import { VisualStyleLock, SCENE_DURATION_SECONDS } from 'shared';
 import type { ContentProfileConfig } from 'shared';
 
+export const CAMERA_MOVE_TIERS = {
+  calm: ['Static', 'Very slow push in', 'Very slow pull back', 'Locked-off pan'],
+  standard: ['Static', 'Slow push in', 'Slow pull back', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Tracking shot', 'Dolly in', 'Dolly out', 'Rack focus'],
+  dynamic: ['Static', 'Slow push in', 'Slow pull back', 'Pan left', 'Pan right', 'Tilt up', 'Tilt down', 'Tracking shot', 'Handheld', 'Crane up', 'Crane down', 'Dolly in', 'Dolly out', 'Whip pan', 'Rack focus']
+};
+
+export const SHOT_SIZE_ROTATION = ["establishing", "wide", "medium", "close_up", "extreme_close_up"];
+
+export function resolveEnergyTier(profile?: ContentProfileConfig): 'calm' | 'standard' | 'dynamic' {
+  return (profile?.cameraEnergy || 'dynamic') as 'calm' | 'standard' | 'dynamic';
+}
+
+export function getAssignedShotGrammar(globalIndex: number, tier: "calm" | "standard" | "dynamic"): { cameraMove: string; shotSize: string } {
+  const cameraMove = CAMERA_MOVE_TIERS[tier][globalIndex % CAMERA_MOVE_TIERS[tier].length];
+  const shotSize   = SHOT_SIZE_ROTATION[globalIndex % SHOT_SIZE_ROTATION.length];
+  return { cameraMove, shotSize };
+}
+
 export const getVeoSystemPrompt = (project: any, bible: any, profile?: ContentProfileConfig): string => {
-  const cameraEnergy = profile?.cameraEnergy || 'dynamic';
-  const cameraVocabulary = cameraEnergy === 'calm' 
-    ? 'Static | Very slow push in | Very slow pull back | Locked-off pan'
-    : cameraEnergy === 'standard' 
-      ? 'Static | Slow push in | Slow pull back | Pan left | Pan right | Tilt up | Tilt down | Tracking shot | Dolly in | Dolly out | Rack focus'
-      : 'Static | Slow push in | Slow pull back | Pan left | Pan right | Tilt up | Tilt down | Tracking shot | Handheld | Crane up | Crane down | Dolly in | Dolly out | Whip pan | Rack focus';
+  const cameraEnergy = resolveEnergyTier(profile);
+  const cameraVocabulary = CAMERA_MOVE_TIERS[cameraEnergy].join(' | ');
 
   const adjectiveVarietyRule = profile?.id === 'documentary'
-    ? `- STRICT OBSERVATIONAL REALISM (HARD RULE): Do NOT use any evaluative or filler adjectives that add no visible information (such as "beautiful", "stunning", "majestic", "breathtaking", "epic", "gorgeous", "mesmerizing", "captivating", "dramatic"). You must describe ONLY concrete, observable nouns, physical materials, and literal actions (e.g., "rust streaks down the riveted iron hull" instead of "a beautiful old ship"). Every word must describe a visible physical detail.`
-    : `- Prefer concrete, observable nouns, physical materials, and literal actions over subjective evaluative adjectives (such as "beautiful", "stunning", "majestic", "breathtaking", "epic", "gorgeous", "mesmerizing", "captivating", "dramatic"). Focus on physical descriptors rather than emotional reactions (e.g., "rust streaks down the riveted iron hull" instead of "a beautiful old ship"). Narrative/viral projects allow limited stylistic flourish, but visual descriptions must remain anchored to observable physical realities.`;
+    ? `- STRICT OBSERVATIONAL REALISM (HARD RULE): Do NOT use any evaluative or filler adjectives that add no visible information (such as "beautiful", "stunning", "majestic", "breathtaking", "epic", "gorgeous", "mesmerizing", "captivating", "dramatic"). You must describe ONLY concrete, observable nouns, physical materials, and literal actions (e.g., "rust streaks down the riveted iron hull" instead of "a beautiful old ship"). Every word must describe a visible physical detail. Do NOT use lazy crutch adjectives (majestic, monumental, colossal, epic, immense, massive, clean, industrial, powerful, precise) — replace them with specific sensory descriptions. Vary the emotional and physical register across shots (huge vs tiny, fast vs slow, quiet vs explosive, human vs mechanical).`
+    : profile?.id === 'cinematic_series'
+      ? `- CINEMATIC FLOURISH & DRAMATIC STYLE: You are encouraged to use high-impact, evocative visual description. However, you must avoid lazy crutch adjectives (majestic, monumental, colossal, epic, immense, massive, clean, industrial, powerful, precise) and replace them with specific, sensory descriptions. Vary the emotional and physical register across shots (huge vs tiny, fast vs slow, quiet vs explosive, human vs mechanical) to ensure dynamic pacing.`
+      : `- Prefer concrete, observable nouns, physical materials, and literal actions over subjective evaluative adjectives. Do NOT use lazy crutch adjectives (majestic, monumental, colossal, epic, immense, massive, clean, industrial, powerful, precise) — replace them with specific sensory descriptions. Vary the emotional and physical register across shots (huge vs tiny, fast vs slow, quiet vs explosive, human vs mechanical) to keep the visual sequence dynamic.`;
 
   const environmentalRealismRule = profile?.id === 'documentary'
-    ? `- ENVIRONMENTAL REALISM & MICRO-PHYSICS (HARD RULE): Enrich the description with physically-grounded, observable detail appropriate to the materials and environment actually present in the scene. As relevant, describe particulate/atmosphere (dust, steam, mist, spray, haze), material behavior & wear (rust streaks, scratches, condensation, grease, worn paint, water beading), light interaction with surfaces (glint, reflection, refraction, shadow falloff), and motion physics (ripples, sway, settling, vibration). Use grounded, observational physical detail only (no stylization). Do not add new subjects or secondary actions. Word-neutral: substitute generic descriptors with these concrete details, target 60 to 75 words without increasing overall length. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`
-    : `- ENVIRONMENTAL REALISM & MICRO-PHYSICS: Enrich the description with physically-grounded, observable detail appropriate to the materials and environment actually present in the scene. As relevant, describe particulate/atmosphere (dust, steam, mist, spray, haze), material behavior & wear (rust streaks, scratches, condensation, grease, worn paint, water beading), light interaction with surfaces (glint, reflection, refraction, shadow falloff), and motion physics (ripples, sway, settling, vibration). Same physical grounding is required, but limited cinematic emphasis is allowed. Do not add new subjects or secondary actions. Word-neutral: substitute generic descriptors with these concrete details, target 60 to 75 words without increasing overall length. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`;
+    ? `- ENVIRONMENTAL REALISM & MICRO-PHYSICS (HARD RULE): Enrich the description with physically-grounded, observable detail appropriate to the materials and environment actually present in the scene. Incorporate per-subject micro-event textures chosen specifically for the subject in focus from this palette: sparks, pantograph arcing, heat shimmer, vibration/wobble, smoke/steam, brake/coal dust, settling particulate, cable sway, surface reflections/ripples, wind, birds, grime/wear. Do NOT reuse the same single texture (e.g., "dust") in consecutive shots. Use grounded, observational physical detail only (no stylization). Word-neutral: substitute generic descriptors with these concrete details, targeting 60 to 75 words without increasing overall length. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`
+    : profile?.id === 'cinematic_series'
+      ? `- CINEMATIC ENVIRONMENTAL & CONTINUITY BEATS: Enrich descriptions with atmospheric features and surface reflections to emphasize high-production scale. Incorporate per-subject micro-event textures chosen specifically for the subject in focus from this palette: sparks, pantograph arcing, heat shimmer, vibration/wobble, smoke/steam, brake/coal dust, settling particulate, cable sway, surface reflections/ripples, wind, birds, grime/wear. Do NOT reuse the same single texture (e.g., "dust") in consecutive shots. Do not increase overall word length, targeting 60 to 75 words. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`
+      : `- ENVIRONMENTAL REALISM & MICRO-PHYSICS: Enrich the description with physically-grounded, observable detail appropriate to the materials and environment actually present in the scene. Incorporate per-subject micro-event textures chosen specifically for the subject in focus from this palette: sparks, pantograph arcing, heat shimmer, vibration/wobble, smoke/steam, brake/coal dust, settling particulate, cable sway, surface reflections/ripples, wind, birds, grime/wear. Do NOT reuse the same single texture (e.g., "dust") in consecutive shots. Word-neutral: substitute generic descriptors with these concrete details, targeting 60 to 75 words without increasing overall length. Strictly avoid any meta-phrasing, rendering terminology, camera specifications, or aesthetic buzzwords (such as those listed under the ABSOLUTE WORD BAN).`;
 
   const shotCompositionRule = profile?.id === 'documentary'
     ? `- Shot: A concise phrase or single sentence describing camera framing, angle, height, and spatial depth layering (e.g. "eye-level medium shot on the subject, centering them according to the rule of thirds, with foreground equipment softened and background walls blurred").
   - OBSERVATIONAL FRAMING & DEPTH LAYERING (HARD RULE): Describe spatial depth via layering (clear foreground, midground, and background elements, specifying which elements read sharp vs. softened/hazy). Express layering physically, NEVER use banned camera/rendering jargon ("depth of field", "bokeh", "lens flare", "focus", "focused", "unfocused", "out-of-focus"). Define subject placement (rule-of-thirds, eyelines, natural headroom) and camera perspective (stable, eye-level, naturalistic angles for observational honesty). Keep it to one concise phrase or sentence.
   - SEPARATION OF CONCERNS: The Shot field describes only the framing (angle, height, layering intent). The Visual field describes physical scene content and actions. Do not duplicate or contradict between them, and keep ONE coherent shot type.`
-    : `- Shot: A concise phrase or single sentence describing camera framing, angle, height, and spatial depth layering (e.g. "low-angle medium shot on the subject, centering them according to the rule of thirds, with foreground equipment softened and background walls blurred").
+    : profile?.id === 'cinematic_series'
+      ? `- Shot: A concise phrase or single sentence describing camera framing, angle, height, and spatial depth layering (e.g., "sweeping low-angle tracking shot centering the confrontation, with dust motes drifting through deep lens highlights and background debris blurred").
+  - CINEMATIC COMPOSITION & DRAMATIC ANGLES: Describe dramatic, dynamic angles (low-angle, high-angle, Dutch tilts, whip pans, crane shots) to capture action and scale. Define spatial depth via clear foreground, midground, and background layering. Note: "depth of field", "bokeh", "lens flare", and "focus" are allowed for cinematic projects to specify technical camera details.
+  - SEPARATION OF CONCERNS: The Shot field describes only the framing (angle, height, layering intent). The Visual field describes physical scene content and actions. Do not duplicate or contradict between them, and keep ONE coherent shot type.`
+      : `- Shot: A concise phrase or single sentence describing camera framing, angle, height, and spatial depth layering (e.g. "low-angle medium shot on the subject, centering them according to the rule of thirds, with foreground equipment softened and background walls blurred").
   - DYNAMIC COMPOSITION & DEPTH LAYERING: Describe spatial depth via layering (clear foreground, midground, and background elements, specifying which elements read sharp vs. softened/hazy). Express layering physically, NEVER use banned camera/rendering jargon ("depth of field", "bokeh", "lens flare", "focus", "focused", "unfocused", "out-of-focus"). Define subject placement (rule-of-thirds, leading lines, dramatic headroom/eyelines) and camera perspective (dynamic heights, low-angle, or high-angle views allowed). Keep it to one concise phrase or sentence.
   - SEPARATION OF CONCERNS: The Shot field describes only the framing (angle, height, layering intent). The Visual field describes physical scene content and actions. Do not duplicate or contradict between them, and keep ONE coherent shot type.`;
 
 
   const aspectRatio = project?.aspect_ratio || '16:9';
+
+  const absoluteWordBan = profile?.id === 'cinematic_series'
+    ? `- ABSOLUTE WORD BAN: You must NEVER output any of these specific words or their variations/plurals in the visual description field: "textures", "texture", "naturalistic", "authentic", "aesthetic", "aesthetics", "shaders", "shader", "rendering", "render", "photorealistic", "realism", "realistic", "CGI integration", "CGI", "integration", "large-format sensor", "sensor", "film grain", "grain", "fidelity", "documentary", "focus". This includes composite phrases such as "industrial aesthetic", "documentary realism", "realistic textures", "large-format sensor", "photorealistic cgi", "focus". You must translate these concepts into raw visible things (e.g., write "weathered steel and peeling paint" instead of "industrial aesthetic" or "textures"). Note: "cinematic", "lens flare", "depth of field", and "bokeh" are allowed for cinematic projects.`
+    : `- ABSOLUTE WORD BAN: You must NEVER output any of these specific words or their variations/plurals in the visual description field: "textures", "texture", "naturalistic", "authentic", "aesthetic", "aesthetics", "shaders", "shader", "rendering", "render", "photorealistic", "realism", "realistic", "CGI integration", "CGI", "integration", "depth of field", "bokeh", "large-format sensor", "sensor", "film grain", "grain", "lens flare", "lens flares", "fidelity", "cinematic", "documentary", "focus". This includes composite phrases such as "industrial aesthetic", "cinematic lighting", "documentary realism", "realistic textures", "depth of field", "large-format sensor", "photorealistic cgi", "focus". You must translate these concepts into raw visible things (e.g., write "weathered steel and peeling paint" instead of "industrial aesthetic" or "textures").`;
+
+  const cinematicRulesBlock = profile?.id === 'cinematic_series'
+    ? `## CINEMATIC SERIES PIPELINE RULES:
+- DYNAMIC CAMERA ENERGY: Use high-energy, dramatic, and sweeping camera moves (e.g., dolly zooms, crane shots, handheld camera tracking, whip pans).
+- DRAMATIC LIGHTING & LENS FLARES: Describe cinematic lighting (e.g., high-contrast chiaroscuro, colorful neon backlighting, rim lighting, lens flares) to amplify drama and atmosphere.
+- CREATURE SCALE & COMBAT CHOREOGRAPHY: Explicitly detail creature/monster size, power activation, aggressive action, and combat beats with clear physical choreography.
+- SNAPSHOT CONTINUITY CONSUMPTION: Pay close attention to the visual state snapshot fields:
+  * character_damage: describe character injuries/wounds (e.g. "a bleeding slash wound on his left arm").
+  * costume_armor_state: describe costume wear and tear (e.g. "his leather jacket is torn at the shoulder").
+  * creature_states: describe creature status (unharmed, injured, defeated, dead) and whether powers are active.
+  * environmental_destruction: describe broken environment details (e.g. "shattered neon glass and crumbling brick on the ground").
+- COPYRIGHT-SAFE ORIGINALITY: Never describe copyrighted or franchise-owned characters, creatures, or designs (no Godzilla, Xenomorphs, Marvel/DC superheroes, etc.). Describe original visual designs instead.`
+    : '';
 
   const compactLocations = (bible.location_roster || []).map((l: any) => ({
     name: l.name,
@@ -106,20 +145,25 @@ CINEMATIC INTENT — MANDATORY RULES:
 Design every field with this constraint in mind:
 
 - Visual: Describe ONE continuous visual moment in a single paragraph favoring: Subject + Action + Scene/Context + Camera + Lens + Lighting + Mood + Audio.
-  - SINGLE DOMINANT ACTION: Enforce exactly ONE dominant continuous action or moment in the clip (no compound or teleporting motion, no transitions, and no listing of multiple simultaneous activities).
+  - SINGLE DOMINANT ACTION: Enforce exactly ONE dominant continuous action or moment in the clip (no compound or teleporting motion, and no listing of multiple simultaneous activities). You may use at most one optional WITHIN-TAKE transition (rack focus, whip pan, speed ramp, foreground occlusion/wipe by a passing object, lens-flare wipe, match-on-action). EXPLICITLY FORBID edit-layer cuts inside a single clip (such as hard cut, match cut between different scenes, dissolve, fade) — those are NOT in-clip transitions.
   - LENGTH: Target a length of 60 to 75 words (strictly between 40 and 80 words).
   - METADATA EXCLUSION: Do NOT write any meta-phrasing, rendering terms, camera specifications, or aesthetic words in the visual description.
-  - ABSOLUTE WORD BAN: You must NEVER output any of these specific words or their variations/plurals in the visual description field: "textures", "texture", "naturalistic", "authentic", "aesthetic", "aesthetics", "shaders", "shader", "rendering", "render", "photorealistic", "realism", "realistic", "CGI integration", "CGI", "integration", "depth of field", "bokeh", "large-format sensor", "sensor", "film grain", "grain", "lens flare", "lens flares", "fidelity", "cinematic", "documentary", "focus". This includes composite phrases such as "industrial aesthetic", "cinematic lighting", "documentary realism", "realistic textures", "depth of field", "large-format sensor", "photorealistic cgi", "focus". You must translate these concepts into raw visible things (e.g., write "weathered steel and peeling paint" instead of "industrial aesthetic" or "textures").
+  ${absoluteWordBan}
   ${environmentalRealismRule}
   - CONTEXT OVERRIDE: If the PROJECT CONTEXT, Visual Style, or Style Lock Guidelines contain any of the banned terms listed in the ABSOLUTE WORD BAN, you MUST ignore those specific terms and translate them into concrete visible elements instead. Do not copy them, their synonyms, or related meta-jargon into the Visual field.
   - BASE FOOTAGE ONLY: Describe ONLY the physical photorealistic scene or primary animated footage. NEVER instruct CGI overlays, infographics, HUDs, scale-comparison graphics (e.g., do NOT describe "CGI integration of multiple football fields" or "overlay showing data"), or screen overlays; those are added in post-production.
   - The output video must have a ${aspectRatio} aspect ratio.${aspectRatio === '9:16' ? ' For vertical 9:16 framing, ensure the subject is centered and action is vertically framed.' : ''}
 
   ${shotCompositionRule}
+  ${cinematicRulesBlock ? '\n  ' + cinematicRulesBlock + '\n' : ''}
 
 - shot_type: Must be exactly one of: establishing, wide, medium, close_up, extreme_close_up, aerial, pov, over_shoulder, insert.
 
 - Camera: ONE precise camera movement only, matching the CAMERA MOVEMENT VOCABULARY above.
+
+- action_arc: A Start->Motion->End arc for ONE continuous take (subject/camera state at start -> the single dominant motion -> end state). Describe a temporal sequence of one continuous ~8s action, e.g. "Locomotive enters frame from left, accelerates as ballast dust lifts, sunlight rakes across the steel flank, settling as the rear power car clears the curve." It must stay ONE continuous shot (no scene cuts inside it).
+
+- in_clip_transition: An optional single within-take/in-camera transition drawn from this vocabulary: rack focus, whip pan, speed ramp, foreground occlusion/wipe by a passing object, lens-flare wipe, match-on-action. If the shot is a plain continuous take, leave this as "none". EXPLICITLY FORBID edit-layer cuts inside a single clip (such as hard cut, match cut between different scenes, dissolve, fade) — those are NOT in-clip transitions.
 
 - Ambient Sound: Sustained background audio representing the continuous world soundscape. Choose wind, water, crowd, or ambient silence.
 
@@ -144,7 +188,7 @@ DYNAMIC ADAPTATION RULES (NON-NEGOTIABLE):
 VISUAL field:
 - Always reflect the project topic and apply visual_style.
 - All veo_style_tokens must appear naturally in the visual description, EXCEPT for any forbidden/rendering/aesthetic terms listed in the ABSOLUTE WORD BAN. You MUST ignore those specific style tokens and describe the raw visible scene instead.
-- Numbers: write ALL numbers as words (e.g. "thirty-five" not "35").
+- Numbers: write ALL numbers as words (e.g. "thirty-five" not "35"). For aircraft model designations (like the Boeing 7x7 family), write them in their canonical spoken grouped format (e.g. "seven eighty-seven", "seven forty-seven", "seven thirty-seven", etc.) instead of cardinal words or digits.
 - Forbid vague/invisible descriptors: do NOT use "imperceptibly", "subtly", "seamless", "complex", "profound", or "dynamic data". You must describe concrete visible changes (e.g. "fuel surface visibly lowers", "waterline reveals a band of hull paint", "gauge needle vibrates", "blue bars rise/fall").
 ${adjectiveVarietyRule}
 - Absolute Word Ban: Do NOT use any banned words or camera parameters in the visual description under any circumstances.
@@ -173,7 +217,7 @@ AUDIO CONSISTENCY RULE:
 
 ## OUTPUT FORMAT LOCK:
 Your JSON output must contain these exact field keys and no others:
-visual, lens, lighting, camera, ambient_sound, sfx, dialogue, avoid, connection, narration, shot, shot_type, duration_seconds, scene_type, overlay_suggestions.
+visual, action_arc, in_clip_transition, lens, lighting, camera, ambient_sound, sfx, dialogue, avoid, connection, narration, shot, shot_type, duration_seconds, scene_type, overlay_suggestions.
 
 Do not output: veo_full_prompt, sound (as a nested object), timestamp, index, scene_number, or any field not listed above.
 
@@ -184,6 +228,8 @@ Return ONLY a valid JSON object matching the requested schema. No prose.
 REQUIRED JSON STRUCTURE (use exactly these field names without omission):
 {
   "visual": "string",
+  "action_arc": "Start->Motion->End temporal action arc for one continuous take.",
+  "in_clip_transition": "none | in-clip transition type from allowed vocabulary.",
   "shot": "string",
   "shot_type": "medium",
   "lens": "string detailing exactly one consolidated lens/camera descriptor, ensuring no contradictory lens info appears in the visual or look",
@@ -201,7 +247,7 @@ REQUIRED JSON STRUCTURE (use exactly these field names without omission):
     {
       "text": "string (on-screen label, callout, chapter title, or diagram annotation derived from narration and scene context, like component names, key terms, or numbers like '70–80°C'. Labels MUST always be in ENGLISH even if the narration is in Hindi)",
       "type": "label | callout | title | annotation",
-      "target": "string (visual element this anchors to, e.g. 'Compressor inlet' or 'willis carrier portrait')",
+      "target": "string (visual element this anchors to, e.g. 'Compress inlet' or 'willis carrier portrait')",
       "timing": "string (optional timing annotation)"
     }
   ]
@@ -223,7 +269,9 @@ export const getVeoUserPrompt = (
   previousLightings?: string[],
   previousVisual?: string,
   emotionalArcContext?: string,
-  shotDiversityConstraint?: string
+  shotDiversityConstraint?: string,
+  profile?: ContentProfileConfig,
+  assignedConstraints?: { cameraMove: string; shotSize: string }
 ): string => {
   let prompt = `Generate the Veo prompt configuration for the following scene. Note that all IDs have been fully resolved to their descriptions:
 
@@ -253,6 +301,34 @@ Style Lock Guidelines:
 - Veo Style Tokens to inject: [${styleLock.veo_style_tokens.join(', ')}]
 - Forbidden Elements to add to Avoid list: [${styleLock.forbidden_elements.join(', ')}]`;
 
+  if (profile?.id === 'cinematic_series') {
+    let snapshot: any = null;
+    try {
+      snapshot = scene.visual_state_snapshot
+        ? (typeof scene.visual_state_snapshot === 'string' ? JSON.parse(scene.visual_state_snapshot) : scene.visual_state_snapshot)
+        : (scene.raw_json ? (typeof scene.raw_json === 'string' ? JSON.parse(scene.raw_json).visual_state_snapshot : scene.raw_json.visual_state_snapshot) : null);
+    } catch (e) {}
+
+    if (snapshot) {
+      const damageList = snapshot.character_damage ? Object.entries(snapshot.character_damage).map(([id, desc]) => `- Character ${id}: ${desc}`).join('\n') : '';
+      const costumeList = snapshot.costume_armor_state ? Object.entries(snapshot.costume_armor_state).map(([id, desc]) => `- Character ${id}: ${desc}`).join('\n') : '';
+      const creatureList = snapshot.creature_states ? snapshot.creature_states.map((c: any) => `- ${c.name}: status=${c.status}, powers_active=${c.powers_active ?? 'N/A'}`).join('\n') : '';
+      const envDestruction = snapshot.environmental_destruction || '';
+
+      prompt += `
+
+## CURRENT SCENE VISUAL CONTINUITY STATE (MUST BE DEPICTED IN THE VISUAL PROMPT):
+- Character Damage/Injuries:
+${damageList || '  None'}
+- Costume/Armor State:
+${costumeList || '  None'}
+- Creature/Monster States:
+${creatureList || '  None'}
+- Environmental Destruction:
+  ${envDestruction || 'None'}`;
+    }
+  }
+
   if (emotionalArcContext) {
     prompt += `\n\n## EMOTIONAL ARC & SCENE POSITION:\n${emotionalArcContext}`;
   }
@@ -279,6 +355,12 @@ Style Lock Guidelines:
 
   if (youtubeTranscript && youtubeTranscript.trim().length > 0) {
     prompt += `\n\nYouTube Transcript Reference:\n"${youtubeTranscript}"\n\nThe narration field should echo the natural cadence, pauses, and rhetorical style of the YouTube transcript provided.`;
+  }
+
+  if (assignedConstraints) {
+    prompt += `\n\n## ASSIGNED SHOT CONSTRAINTS (MANDATORY):
+- ASSIGNED CAMERA MOVE (MANDATORY): ${assignedConstraints.cameraMove}. The \`camera\` field MUST be this move, and the visual + action_arc MUST be written around executing this exact move. Do not substitute a different move.
+- TARGET SHOT SIZE: ${assignedConstraints.shotSize}. Use this size unless the scene context makes it physically impossible; if you must deviate, pick a size DIFFERENT from a plain wide — never collapse to wide/wide/wide.`;
   }
 
   return prompt;

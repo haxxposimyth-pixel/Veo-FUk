@@ -2,18 +2,38 @@ import { z } from 'zod';
 
 // ─── Project Schemas ──────────────────────────────────────────────────────────
 
+export const movieConfigSchema = z.object({
+  format: z.enum(['single_movie', 'episode_series', 'season_based_series']),
+  genre: z.string(),
+  tone: z.array(z.string()),
+  story_engine_focus: z.object({
+    combat: z.boolean(),
+    world_exploration: z.boolean(),
+    monster_action: z.boolean(),
+    hero_journey: z.boolean(),
+    season_continuity: z.boolean(),
+  }),
+  season_number: z.number().int().optional(),
+  episode_number: z.number().int().optional(),
+  hero_idea: z.string().optional(),
+  villain_idea: z.string().optional(),
+  world_idea: z.string().optional(),
+  creature_idea: z.string().optional(),
+});
+
 export const projectCreateSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100),
   topic: z.string().min(10, 'Topic must be at least 10 characters').max(2000),
   visual_style: z.string().min(1, 'Visual style is required'),
   narration_language: z.string().min(1).default('English'),
   aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3']).default('16:9'),
-  content_type: z.enum(['auto','narrative','documentary','presenter']).default('auto'),
+  content_type: z.enum(['auto','narrative','documentary','presenter','montage']).default('auto'),
   content_profile: z.string().default('viral_story'),
   youtube_transcript: z.string().optional().nullable(),
   style_id: z.string().optional(),
   concept_brief: z.string().optional().nullable(),
   target_duration_minutes: z.number().int().default(8),
+  movie_config: movieConfigSchema.optional(),
 });
 
 export const projectUpdateSchema = z.object({
@@ -22,13 +42,14 @@ export const projectUpdateSchema = z.object({
   visual_style: z.string().optional().default(''),
   narration_language: z.string().min(1).optional(),
   aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3']).optional(),
-  content_type: z.enum(['auto','narrative','documentary','presenter']).optional(),
+  content_type: z.enum(['auto','narrative','documentary','presenter','montage']).optional(),
   content_profile: z.string().optional(),
   youtube_transcript: z.string().optional().nullable(),
   status: z.enum(['setup', 'bible', 'script', 'scenes', 'prompts', 'complete']).optional(),
   style_id: z.string().optional(),
   concept_brief: z.string().optional().nullable(),
   target_duration_minutes: z.number().int().optional(),
+  movie_config: movieConfigSchema.optional(),
 });
 
 // ─── Settings Schema ──────────────────────────────────────────────────────────

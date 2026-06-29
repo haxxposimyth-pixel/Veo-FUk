@@ -2,6 +2,7 @@ import { BaseAgent } from './base-agent';
 import { z } from 'zod';
 import type { VeoPromptData, ProductionBibleData } from 'shared';
 import { continuityAgentOutputSchema } from 'shared';
+import db from '../db/connection';
 
 export class ContinuityAgent extends BaseAgent {
   constructor() {
@@ -18,6 +19,14 @@ export class ContinuityAgent extends BaseAgent {
     onChunk?: (chunk: string) => void,
     isCrossPhase = false
   ): Promise<z.infer<typeof continuityAgentOutputSchema>> {
+    let contentProfile: string | null = null;
+    try {
+      const projRow = db.prepare('SELECT content_profile FROM projects WHERE id = ?').get(projectId) as { content_profile: string } | undefined;
+      if (projRow) {
+        contentProfile = projRow.content_profile;
+      }
+    } catch (dbErr) {}
+
     let system = `You are the Continuity Editor for a video production pipeline.
 Your job is to review a series of generated video prompts (for a single phase) and ensure they are perfectly consistent with the Production Bible.
 
@@ -47,6 +56,22 @@ Warning format:
 { field: 'character_anachronism', issue: 'Character [name] (era: [character era from Bible]) appears in a scene set in [detected narrative era of this phase].', suggestion: 'Either remove [name] from this phase, replace with a period-appropriate figure, or add explicit narrative framing in an earlier phase establishing that [name] is being used as a symbolic device across time periods.' }`;
     }
 
+    if (contentProfile === 'cinematic_series') {
+      system += `
+
+ADDITIONAL CINEMATIC CONTINUITY RULES (MANDATORY):
+1. CREATURE DRIFT: A creature/monster's size/scale, physical design, status, or active powers described in the visual prompt or visual_state_snapshot must match its creature_registry lock exactly. Flag any size/ability/behavior contradictions.
+2. DEFEATED CREATURE REAPPEARS: If a creature is marked as 'defeated' or 'dead' in visual_state_snapshot.creature_states in an earlier scene, it cannot reappear as active, unharmed, or 'unharmed' in a later scene's snapshot or visual description without explicit narrative explanation (e.g., resurrection or a different creature of the same species).
+3. INJURY DISCONTINUITY: Any character injuries/wounds recorded in visual_state_snapshot.character_damage must persist or escalate in later scenes. If a wound suddenly disappears or heals instantly in a subsequent scene's snapshot or visual description, flag it as a continuity error.
+4. COSTUME/ARMOR DISCONTINUITY: Costume and armor wear (e.g. torn jacket, cracked faceplate) recorded in visual_state_snapshot.costume_armor_state must persist across scenes. If a damaged costume magically becomes intact or pristine again in a later scene without cause, flag it.
+5. DESTRUCTION DISCONTINUITY: Any environmental destruction (e.g. crumbled masonry, shattered glass) recorded in visual_state_snapshot.environmental_destruction must persist in subsequent scenes set in the SAME location. If the environment magically repairs itself, flag it.
+
+Warning format:
+- field: must be the prompt field containing the discrepancy (typically "visual").
+- issue: description of the violation (e.g. "CREATURE DRIFT: [details]", "DEFEATED CREATURE REAPPEARS: [details]", "INJURY DISCONTINUITY: [details]", "COSTUME/ARMOR DISCONTINUITY: [details]", "DESTRUCTION DISCONTINUITY: [details]").
+- suggestion: concrete text change to resolve the issue.`;
+    }
+
     system += `
 
 If you find any inconsistencies, return a JSON object with a "warnings" array.
@@ -60,27 +85,55 @@ If no issues are found, return { "warnings": [] }
 
 Return ONLY valid JSON. No markdown formatting.`;
 
-    const promptsForReview = prompts.map(p => ({
-      prompt_number: String(p.prompt_number),
-      visual: p.visual,
-      shot: p.shot,
-      lens: p.lens,
-      lighting: p.lighting,
-      camera: p.camera,
-      avoid: p.avoid,
-      narration: p.narration,
-      dialogue: p.dialogue
-    }));
+    const promptsForReview = prompts.map(p => {
+      const base: any = {
+        prompt_number: String(p.prompt_number),
+        visual: p.visual,
+        shot: p.shot,
+        lens: p.lens,
+        lighting: p.lighting,
+        camera: p.camera,
+        avoid: p.avoid,
+        narration: p.narration,
+        dialogue: p.dialogue
+      };
+
+      if (contentProfile === 'cinematic_series') {
+        try {
+          const row = db.prepare(`
+            SELECT visual_state_snapshot, raw_json FROM scenes
+            WHERE project_id = ? AND scene_number = ?
+          `).get(projectId, p.prompt_number) as { visual_state_snapshot: string | null; raw_json: string } | undefined;
+          
+          if (row) {
+            const snapshot = row.visual_state_snapshot
+              ? JSON.parse(row.visual_state_snapshot)
+              : (row.raw_json ? JSON.parse(row.raw_json).visual_state_snapshot : null);
+            if (snapshot) {
+              base.visual_state_snapshot = snapshot;
+            }
+          }
+        } catch (e) {
+          console.error(`[ContinuityAgent] Failed to fetch snapshot for prompt ${p.prompt_number}:`, e);
+        }
+      }
+      return base;
+    });
+
+    const bibleContext: any = {
+      character_roster: bible.character_roster,
+      location_roster: bible.location_roster,
+      visual_style_lock: bible.visual_style_lock
+    };
+    if (contentProfile === 'cinematic_series') {
+      bibleContext.creature_registry = (bible as any).creature_registry || [];
+    }
 
     const user = `Review these prompts for continuity errors:
 ${JSON.stringify(promptsForReview, null, 2)}
 
 Against this Production Bible:
-${JSON.stringify({
-  character_roster: bible.character_roster,
-  location_roster: bible.location_roster,
-  visual_style_lock: bible.visual_style_lock
-}, null, 2)}`;
+${JSON.stringify(bibleContext, null, 2)}`;
 
     return await this.generateStructured<z.infer<typeof continuityAgentOutputSchema>>(
       projectId,
@@ -125,12 +178,27 @@ You MUST follow these rules:
     // === VVS OPT FIX-1B START ===
     const styleName = bible?.visual_style_lock?.style_name || '';
 
+    let contentProfile: string | null = null;
+    if (warning && warning.project_id) {
+      try {
+        const projRow = db.prepare('SELECT content_profile FROM projects WHERE id = ?').get(warning.project_id) as { content_profile: string } | undefined;
+        if (projRow) {
+          contentProfile = projRow.content_profile;
+        }
+      } catch (dbErr) {}
+    }
+
+    let snapshotStr = '';
+    if (contentProfile === 'cinematic_series' && scene && scene.visual_state_snapshot) {
+      snapshotStr = `\n- Visual State Snapshot: ${JSON.stringify(scene.visual_state_snapshot, null, 2)}`;
+    }
+
     const userPrompt = `We found a continuity warning in this prompt:
 - Field to fix: ${fieldName}
 - Current value: "${currentValue}"
 - Continuity issue: ${warning.issue}
 - Suggestion to fix: ${warning.suggestion}
-- Visual Style Name: ${styleName}
+- Visual Style Name: ${styleName}${snapshotStr}
 
 Rewrite the "${fieldName}" field to fix the warning. Return a JSON object with "corrected_value".`;
     // === VVS OPT FIX-1B END ===

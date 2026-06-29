@@ -1,4 +1,5 @@
 import { ProductionBibleData, ScriptPhaseItem, resolveLanguageRules } from 'shared';
+import { COPYRIGHT_SAFE_ORIGINALITY } from './originality.constraint';
 
 export const getSceneSystemPrompt = (
   narrationLanguage: string = 'English',
@@ -9,6 +10,111 @@ export const getSceneSystemPrompt = (
   const termDesc = rules.terminators
     ? `sentence-ending mark(s): ${rules.terminators.split('').join(' ')}`
     : `natural phrase boundaries (e.g. spaces)`;
+
+  if (profile && profile.id === 'cinematic_series') {
+    return `NARRATION SEGMENTATION AND PACING RULES (CRITICAL):
+  You are given the full phase narration text. You must distribute this narration across scene narration fragments (narration_fragment) under these strict rules:
+
+  1. STRICT AUDIO-VISUAL SYNC (MANDATORY): Each scene's scene_description (the Visual) must directly and precisely depict the subject of ITS own assigned narration_fragment.
+
+  2. NARRATIVE BEAT DECOMPOSITION: Decompose the phase into cinematic beats (dialogue, action, combat, suspense, reveals, character moments).
+
+  3. DYNAMIC SCENE SPLITTING: Allow free scene splitting. A narrative beat may become 2-3+ scenes. You determine the optimal number of scenes needed to visually convey the narrative. Create ONE distinct visual prompt per scene.
+
+  4. GRAMMATICALLY COMPLETE & CLIP-SIZED FRAGMENTS:
+     - A narration_fragment MUST end at a grammatically correct point. For ${narrationLanguage}, this is a ${termDesc}.
+     - NEVER end or start a fragment at a comma ',' or in the middle of a clause. A trailing comma is FORBIDDEN.
+     - The ~14-18 word target is a GUIDELINE. It is always better to keep a sentence WHOLE and slightly exceed the word target than to cut a sentence. If one sentence is too long for a clip, keep it intact in a single fragment — the system will subdivide it safely.
+     - Preserve the original punctuation of ${narrationLanguage}; do NOT invent punctuation.
+
+  5. NATURAL FRAGMENTATION (NO MID-SENTENCE CHOPS):
+     - No narration_fragment may start or end abruptly in the middle of a tight grammatical phrase.
+     - Each fragment MUST end cleanly. Semicolons or dashes are acceptable only if the resulting segments are structured as independent clauses, but standard terminal punctuation (such as the appropriate ${termDesc}) is strongly preferred.
+
+  6. COMPLETE COVERAGE:
+     - The sum of all narration_fragments, when read sequentially, must cover all the information, character actions, and story beats of the original phase narration.
+     - If you have empty fragments (marked as ""), ensure they are narratively justified as silent action beats.
+
+  7. PRESENTER/NARRATOR ON-CAMERA RULE:
+     - If the narration in a scene is delivered by the on-screen presenter/narrator (a talking-head/studio shot where the narrator is visible), include the narrator's character id in character_ids_present.
+     - Keep is_dialogue strictly for spoken lines by NON-narrator characters; do not set is_dialogue true just for narration.
+
+  8. B-ROLL DECOUPLING FOR HOOK/CLIMAX AND LIST/MONTAGE (CRITICAL):
+     For high-impact phases (such as HOOK or CLIMAX) or when the narration or phase_content lists/montages multiple distinct concrete subjects in a sequence (e.g., "coffee, phones, shoes"), you MUST expand the list or montage into MULTIPLE separate scene blocks, one for each item or subject. Put the narration fragment ONLY on the lead scene(s) and set all subsequent b-roll scenes' narration_fragment to an EMPTY string "". Do NOT duplicate the scene_description across these scenes. Each scene block must map 1:1 to a distinct visual scene and Veo prompt.
+
+  9. FORBID NARRATION-META IN SCENE DESCRIPTIONS (CRITICAL):
+     The scene_description field must describe ONLY literal visual actions, characters, setting details, and camera views. You are STRICTLY FORBIDDEN from including any meta-text referencing the narration, voiceover, audio, or narrator. Keep the description 100% visual.
+
+  You are the Cinematic Scene Generator. Your job is to break a single script phase into distinct visual beats (scenes) optimized for film and episodic cinema.
+
+  You must follow these strict rules:
+  1. Generate scenes in order. Each scene represents a single shot or cut in the sequence.
+  2. Scene descriptions (scene_description) must describe *only* what is visually visible on screen (e.g. actions, combat choreography, character expressions, lighting, camera angles).
+     SCENE DESCRIPTION FIELD RULE: Use character names, location names, and object names — NOT IDs — in this field.
+     Example — WRONG: "CHAR_001 walks into LOC_002 holding OBJ_001."
+     Example — CORRECT: "Elara walks into The Wildflower Workshop holding the Handcrafted Birdhouse."
+     Only scene_description uses names. The structured JSON fields (character_ids_present, location_id, object_ids_featured) must still use the ID format.
+  3. Reference characters, locations, and objects *strictly* by their Production Bible IDs (e.g. CHAR_001, LOC_002, OBJ_003) in the structured fields: character_ids_present, location_id, and object_ids_featured. Do not use plain text names in these ID lists.
+  4. The narration fragments (narration_fragment) of all scenes, when joined in order, must recreate the complete original phase script narration exactly.
+  5. Vary the shot scales and visual types (e.g., Extreme Close Up, Wide Shot, Action, Dialogue).
+  6. Set the scene duration (estimated_duration_seconds) appropriately for the content and pacing.
+  7. Return ONLY a valid JSON object matching the requested schema. Return a SINGLE JSON OBJECT with a top-level "scenes" array. Do NOT return a bare array. Do NOT wrap in markdown fences. No other text.
+
+${COPYRIGHT_SAFE_ORIGINALITY}
+
+REQUIRED JSON SCHEMA (use exactly these field names):
+{
+  "phase_number": 1,
+  "phase_title": "string",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "title": "string",
+      "scene_description": "string",
+      "continuity_notes": "string",
+      "narration_fragment": "string",
+      "character_ids_present": ["CHAR_001"],
+      "location_id": "LOC_001",
+      "object_ids_featured": ["OBJ_001"],
+      "emotional_beat": "string",
+      "transition_to_next": "cut",
+      "estimated_duration_seconds": 5,
+      "is_dialogue": false,
+      "is_action": true,
+      "narration_word_count": 0,
+      "visual_state_snapshot": {
+        "characters_present": [
+          {
+            "name": "string",
+            "position": "string",
+            "props": ["string"],
+            "physical_condition": "string",
+            "facing_direction": "string"
+          }
+        ],
+        "location_state": "string",
+        "time_of_day": "string",
+        "atmosphere": "string",
+        "key_visible_objects": ["string"],
+        "character_damage": {
+          "CHAR_001": "minor scratch on left cheek"
+        },
+        "costume_armor_state": {
+          "CHAR_001": "jacket dusty and torn at shoulder"
+        },
+        "creature_states": [
+          {
+            "name": "string",
+            "status": "unharmed",
+            "powers_active": false
+          }
+        ],
+        "environmental_destruction": "cracked concrete walls, debris scattered over rain-slicked pavement"
+      }
+    }
+  ]
+}`;
+  }
 
   let docRules = '';
   if (profile && profile.id === 'documentary') {
@@ -175,6 +281,17 @@ Generic crowds, background people, or unlisted groups (e.g., "townsfolk", "crowd
 
   if (characterIdsActive && characterIdsActive.length > 0) {
     prompt += `\n\nSUPPLEMENTAL GROUNDING - ACTIVE CHARACTERS:\nThese characters must be active or featured in the scenes for this phase. Ensure their presence aligns with their blueprints:\n${characterIdsActive.map(id => `- ${id}`).join('\n')}`;
+  }
+
+  if (profile && profile.id === 'cinematic_series') {
+    prompt += `\n\n=== CINEMATIC CONTINUITY TRACKING RULES (MANDATORY) ===
+Your visual_state_snapshot MUST track the persistent state of damage, costume/armor wear, creature states, and environmental destruction:
+1. character_damage: Record any physical injuries, scars, fatigue, or damage visible on the characters at the end of the scene (e.g. {"CHAR_001": "limping, cut on forearm"}). Use Bible character IDs as keys and damage descriptions as values.
+2. costume_armor_state: Record the state of their clothing, suits, or armor (e.g. {"CHAR_001": "armor plating cracked, cloak soot-stained"}). Use Bible character IDs as keys.
+3. creature_states: List any creatures/monsters present or active in the scene, recording their name, status ('unharmed'|'injured'|'defeated'|'dead'), and whether their special powers/abilities are active (powers_active).
+4. environmental_destruction: Record any physical damage to the environment (e.g. debris, fires, craters, broken windows) caused by action or combat in this scene.
+
+${COPYRIGHT_SAFE_ORIGINALITY}`;
   }
 
   return prompt;

@@ -34,6 +34,7 @@ import { toast } from 'react-hot-toast';
 import Select from '../components/ui/Select';
 import { projectsApi } from '../api/projects.api';
 import { customStylesApi } from '../api/customstyles.api';
+import { CinematicConfigurationFields } from '../components/project/CinematicFields';
 
 const PRESET_STYLES = [
   { value: 'Cinematic Realism', label: 'Cinematic Realism' },
@@ -45,6 +46,7 @@ const PRESET_STYLES = [
 ];
 
 const PROFILE_LABELS: Record<string, string> = {
+  auto: 'Auto',
   viral_story: 'Viral Story',
   documentary: 'Documentary',
   industry_profile: 'Industry Profile',
@@ -52,6 +54,11 @@ const PROFILE_LABELS: Record<string, string> = {
   tutorial: 'Tutorial',
   listicle: 'Listicle',
   narrative_fiction: 'Narrative Fiction',
+  cinematic_series: 'Movie / Cinematic Series',
+  episodic_animated_story: 'Episodic Animated Story',
+  kids_educational_story: 'Kids Educational / Cartoon Story',
+  historical_deep_dive: 'Historical Deep-Dive / Mini-Doc',
+  vlog_day_in_life: 'Vlog / Day-in-the-Life',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -59,6 +66,7 @@ const TYPE_LABELS: Record<string, string> = {
   documentary: 'Documentary / Explainer',
   narrative: 'Narrative (characters)',
   presenter: 'Presenter / Talking-head',
+  montage: 'Montage / B-Roll Driven',
 };
 
 export const Dashboard: React.FC = () => {
@@ -145,10 +153,26 @@ export const Dashboard: React.FC = () => {
     },
   });
 
+  const [movieGenre, setMovieGenre] = useState('Sci-fi');
+  const [customMovieGenre, setCustomMovieGenre] = useState('');
+  const [movieFormat, setMovieFormat] = useState<'single_movie' | 'episode_series' | 'season_based_series'>('single_movie');
+  const [movieDuration, setMovieDuration] = useState(10);
+  const [movieVisualStyle, setMovieVisualStyle] = useState('Cinematic realism');
+  const [customMovieVisualStyle, setCustomMovieVisualStyle] = useState('');
+  const [seasonNumber, setSeasonNumber] = useState<number>(1);
+  const [episodeNumber, setEpisodeNumber] = useState<number>(1);
+
   const watchTitle = watch('title');
   const selectedProfile = watch('content_profile') || 'viral_story';
   const selectedType = watch('content_type') || 'auto';
   const isCoherent = isProfileTypeCoherent(selectedProfile, selectedType);
+
+  useEffect(() => {
+    if (selectedProfile === 'cinematic_series') {
+      const finalStyle = movieVisualStyle === 'Custom' ? customMovieVisualStyle : movieVisualStyle;
+      setValue('visual_style', finalStyle || 'Cinematic realism');
+    }
+  }, [selectedProfile, movieVisualStyle, customMovieVisualStyle, setValue]);
 
   const handleGenerateBrief = async () => {
     if (!watchTitle || watchTitle.trim() === '') {
@@ -168,22 +192,34 @@ export const Dashboard: React.FC = () => {
         title: watchTitle,
         language: defaultLanguage,
         content_profile: watch('content_profile') || 'viral_story',
+        content_type: watch('content_type') || 'auto',
       });
 
       clearTimeout(timer);
 
       if (response && response.success && response.brief) {
         const generatedBrief = response.brief;
-        setBrief(generatedBrief);
         setValue('topic', generatedBrief.project_topic);
-        setValue('content_type', generatedBrief.content_type);
-        const cType = generatedBrief.content_type;
-        let cProfile = 'viral_story';
-        if (cType === 'documentary') cProfile = 'documentary';
-        else if (cType === 'narrative') cProfile = 'narrative_fiction';
-        else if (cType === 'presenter') cProfile = 'tutorial';
-        setValue('content_profile', cProfile);
-        setValue('concept_brief', JSON.stringify(generatedBrief));
+        
+        const userProfile = watch('content_profile') || 'viral_story';
+        const userType = watch('content_type') || 'auto';
+
+        if (userProfile === 'auto') {
+          setValue('content_type', generatedBrief.content_type || 'documentary');
+          setValue('content_profile', generatedBrief.content_profile || 'viral_story');
+        } else {
+          if (userType === 'auto') {
+            setValue('content_type', generatedBrief.content_type || 'documentary');
+          }
+        }
+
+        const finalBrief = {
+          ...generatedBrief,
+          content_type: watch('content_type'),
+          content_profile: watch('content_profile')
+        };
+        setBrief(finalBrief);
+        setValue('concept_brief', JSON.stringify(finalBrief));
         
         if (response.style) {
           setBriefStyle(response.style);
@@ -292,11 +328,36 @@ export const Dashboard: React.FC = () => {
     if (isCreating) return;
     setIsCreating(true);
     try {
-      const newProject = await createProject({
+      const isCinematic = data.content_profile === 'cinematic_series';
+      
+      const payload: any = {
         ...data,
-        content_type: data.content_type || 'auto',
-        content_profile: data.content_profile || undefined
-      });
+        content_type: isCinematic ? 'narrative' : (data.content_type || 'auto'),
+        content_profile: data.content_profile || undefined,
+      };
+
+      if (isCinematic) {
+        const finalGenre = movieGenre === 'Custom' ? customMovieGenre : movieGenre;
+        const finalStyle = movieVisualStyle === 'Custom' ? customMovieVisualStyle : movieVisualStyle;
+        payload.visual_style = finalStyle;
+        payload.target_duration_minutes = movieDuration;
+        payload.movie_config = {
+          format: movieFormat,
+          genre: finalGenre,
+          tone: ['High-energy'],
+          story_engine_focus: {
+            combat: true,
+            world_exploration: false,
+            monster_action: false,
+            hero_journey: false,
+            season_continuity: false
+          },
+          season_number: seasonNumber,
+          episode_number: episodeNumber,
+        };
+      }
+
+      const newProject = await createProject(payload);
       toast.success(`Project "${newProject.title}" created!`);
       setIsCreateOpen(false);
       reset();
@@ -391,10 +452,30 @@ export const Dashboard: React.FC = () => {
         title="Viral Video Studio AI"
         description="Launch an autonomous team of multi-agents. Orchestrate the pipeline from Production Bible and scripts to storyboards and Veo technical prompts."
         actions={
-          <Button onClick={() => setIsCreateOpen(true)} className="flex items-center gap-1.5 cursor-pointer">
-            <Plus className="w-4 h-4" />
-            <span>New Project</span>
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                setValue('content_profile', 'cinematic_series');
+                setValue('content_type', 'narrative');
+                setIsCreateOpen(true);
+              }}
+              className="flex items-center gap-1.5 cursor-pointer bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              <Clapperboard className="w-4 h-4" />
+              <span>New Movie / Series</span>
+            </Button>
+            <Button
+              onClick={() => {
+                setValue('content_profile', 'viral_story');
+                setValue('content_type', 'auto');
+                setIsCreateOpen(true);
+              }}
+              className="flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Project</span>
+            </Button>
+          </div>
         }
       />
 
@@ -602,6 +683,9 @@ export const Dashboard: React.FC = () => {
                       <span>{formatRelativeDate(p.created_at)}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <Badge variant={p.content_profile === 'cinematic_series' ? 'purple' : 'gray'}>
+                        {p.content_profile === 'cinematic_series' ? 'Movie Series' : 'Viral Video'}
+                      </Badge>
                       <Badge variant={config.variant}>{config.label}</Badge>
                       {p.has_metadata === 1 && (
                         <Badge variant="brand" className="text-[9px] py-0 px-1 font-semibold">SEO Meta</Badge>
@@ -627,20 +711,22 @@ export const Dashboard: React.FC = () => {
                 {...register('title')}
               />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={briefLoadingState !== 'idle' || !watchTitle || watchTitle.trim() === ''}
-              onClick={handleGenerateBrief}
-              className="h-10 border-[#3A3A4D] hover:bg-[#6C63FF]/20 text-white flex items-center gap-1.5 shrink-0"
-            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Generate Brief</span>
-            </Button>
+            {selectedProfile !== 'cinematic_series' && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={briefLoadingState !== 'idle' || !watchTitle || watchTitle.trim() === ''}
+                onClick={handleGenerateBrief}
+                className="h-10 border-[#3A3A4D] hover:bg-[#6C63FF]/20 text-white flex items-center gap-1.5 shrink-0"
+              >
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Generate Brief</span>
+              </Button>
+            )}
           </div>
 
           {/* Staged Loader */}
-          {briefLoadingState !== 'idle' && (
+          {briefLoadingState !== 'idle' && selectedProfile !== 'cinematic_series' && (
             <div className="p-4 bg-[#1A1A24]/60 border border-[#2A2A38] rounded-lg flex items-center gap-3">
               <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#6C63FF] border-t-transparent"></div>
               <span className="text-xs font-bold text-gray-300">
@@ -650,7 +736,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* Title Chips */}
-          {brief && brief.titles && brief.titles.length > 0 && (
+          {brief && brief.titles && brief.titles.length > 0 && selectedProfile !== 'cinematic_series' && (
             <div className="space-y-2">
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-400">
                 AI Generated Title Angles (Select one to regenerate brief details)
@@ -681,55 +767,104 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* Profile & Type Selects */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              label="Content Profile (Format & Intent)"
-              options={[
-                { value: 'viral_story', label: 'Viral Story (High Energy)' },
-                { value: 'documentary', label: 'Documentary (Measured)' },
-                { value: 'industry_profile', label: 'Industry Profile / Business Explainer' },
-                { value: 'product_showcase', label: 'Product / Service Showcase' },
-                { value: 'tutorial', label: 'Tutorial (Step-by-step)' },
-                { value: 'listicle', label: 'Listicle (Countdown/List)' },
-                { value: 'narrative_fiction', label: 'Narrative Fiction (Emotional Payoff)' },
-              ]}
-              error={(errors as any).content_profile?.message}
-              {...register('content_profile')}
-            />
-            <Select
-              label="Content Type (Video Structure)"
-              options={[
-                { value: 'auto', label: 'Auto (let the planner decide)' },
-                { value: 'documentary', label: 'Documentary / Explainer' },
-                { value: 'narrative', label: 'Narrative (characters)' },
-                { value: 'presenter', label: 'Presenter / Talking-head' },
-              ]}
-              error={errors.content_type?.message}
-              {...register('content_type')}
-            />
-
-            {!isCoherent && (
-              <div className="md:col-span-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs">
-                <span className="font-semibold text-amber-400">⚠️ Incoherent Combination:</span> The selected Content Profile (<strong>{PROFILE_LABELS[selectedProfile] || selectedProfile}</strong>) is not typically paired with the Video Structure (<strong>{TYPE_LABELS[selectedType] || selectedType}</strong>). This may lead to unexpected results during generation.
+          {selectedProfile === 'cinematic_series' ? (
+            <div className="space-y-4">
+              <div className="p-3 bg-purple-950/20 border border-purple-500/20 rounded-lg flex items-center justify-between text-xs text-purple-400">
+                <div className="flex items-center gap-2">
+                  <Clapperboard className="w-4.5 h-4.5 text-purple-500" />
+                  <span className="font-bold uppercase tracking-wider">Mode: Movie / Cinematic Series</span>
+                </div>
+                <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded text-purple-300 font-bold uppercase tracking-widest">Locked</span>
               </div>
-            )}
-            
-            {/* hidden field to persist the brief */}
-            <input type="hidden" {...register('concept_brief')} />
-            <input type="hidden" {...register('style_id')} />
-            {!briefStyle && <input type="hidden" {...register('visual_style')} />}
-          </div>
+              
+              <CinematicConfigurationFields
+                movieGenre={movieGenre}
+                setMovieGenre={setMovieGenre}
+                customMovieGenre={customMovieGenre}
+                setCustomMovieGenre={setCustomMovieGenre}
+                movieFormat={movieFormat}
+                setMovieFormat={setMovieFormat}
+                movieDuration={movieDuration}
+                setMovieDuration={setMovieDuration}
+                movieVisualStyle={movieVisualStyle}
+                setMovieVisualStyle={setMovieVisualStyle}
+                customMovieVisualStyle={customMovieVisualStyle}
+                setCustomMovieVisualStyle={setCustomMovieVisualStyle}
+                seasonNumber={seasonNumber}
+                setSeasonNumber={setSeasonNumber}
+                episodeNumber={episodeNumber}
+                setEpisodeNumber={setEpisodeNumber}
+              />
+
+              {/* hidden fields to satisfy form fields */}
+              <input type="hidden" {...register('content_profile')} />
+              <input type="hidden" {...register('content_type')} />
+              <input type="hidden" {...register('concept_brief')} />
+              <input type="hidden" {...register('style_id')} />
+              <input type="hidden" {...register('visual_style')} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select
+                label="Content Profile (Format & Intent)"
+                options={[
+                  { value: 'auto', label: 'Auto (auto-select profile & type)' },
+                  { value: 'viral_story', label: 'Viral Story (High Energy)' },
+                  { value: 'documentary', label: 'Documentary (Measured)' },
+                  { value: 'industry_profile', label: 'Industry Profile / Business Explainer' },
+                  { value: 'product_showcase', label: 'Product / Service Showcase' },
+                  { value: 'tutorial', label: 'Tutorial (Step-by-step)' },
+                  { value: 'listicle', label: 'Listicle (Countdown/List)' },
+                  { value: 'narrative_fiction', label: 'Narrative Fiction (Emotional Payoff)' },
+                  { value: 'cinematic_series', label: 'Movie / Cinematic Series' },
+                  { value: 'episodic_animated_story', label: 'Episodic Animated Story' },
+                  { value: 'kids_educational_story', label: 'Kids Educational / Cartoon Story' },
+                  { value: 'historical_deep_dive', label: 'Historical Deep-Dive / Mini-Doc' },
+                  { value: 'vlog_day_in_life', label: 'Vlog / Day-in-the-Life' },
+                ]}
+                error={(errors as any).content_profile?.message}
+                {...register('content_profile')}
+              />
+              <Select
+                label="Content Type (Video Structure)"
+                options={[
+                  { value: 'auto', label: 'Auto (let the planner decide)' },
+                  { value: 'documentary', label: 'Documentary / Explainer' },
+                  { value: 'narrative', label: 'Narrative (characters)' },
+                  { value: 'presenter', label: 'Presenter / Talking-head' },
+                  { value: 'montage', label: 'Montage / B-Roll Driven' },
+                ]}
+                error={errors.content_type?.message}
+                {...register('content_type')}
+              />
+
+              {!isCoherent && (
+                <div className="md:col-span-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs">
+                  <span className="font-semibold text-amber-400">⚠️ Incoherent Combination:</span> The selected Content Profile (<strong>{PROFILE_LABELS[selectedProfile] || selectedProfile}</strong>) is not typically paired with the Video Structure (<strong>{TYPE_LABELS[selectedType] || selectedType}</strong>). This may lead to unexpected results during generation.
+                </div>
+              )}
+              
+              {/* hidden field to persist the brief */}
+              <input type="hidden" {...register('concept_brief')} />
+              <input type="hidden" {...register('style_id')} />
+              {!briefStyle && <input type="hidden" {...register('visual_style')} />}
+            </div>
+          )}
 
           <Textarea
-            label="Video Topic & Goal Description"
-            placeholder="e.g. A suspenseful science video showing the history and future of quantum supremacy. Make it look like a neon-cyberpunk movie with high stakes narrative. Keep narration simple."
+            label={selectedProfile === 'cinematic_series' ? 'Core Story Idea (this episode)' : 'Video Topic & Goal Description'}
+            placeholder={
+              selectedProfile === 'cinematic_series'
+                ? 'e.g. In a post-apocalyptic desert, a lone technician discovers a buried spaceship that holds the key to restoring the oceans...'
+                : 'e.g. A suspenseful science video showing the history and future of quantum supremacy. Make it look like a neon-cyberpunk movie with high stakes narrative. Keep narration simple.'
+            }
             error={errors.topic?.message}
             className="h-40 font-mono text-xs leading-relaxed"
             {...register('topic')}
           />
 
           {/* Visual Style Card */}
-          {briefStyle && (
+          {briefStyle && selectedProfile !== 'cinematic_series' && (
             <div className="border border-[#2A2A38] rounded-lg overflow-hidden bg-[#111118]">
               <div className="flex items-center justify-between px-4 py-3 bg-[#1A1A24]/40 border-b border-[#2A2A38]">
                 <div className="flex items-center gap-2">
@@ -799,7 +934,7 @@ export const Dashboard: React.FC = () => {
           )}
 
           {/* Collapsible Engagement Blueprint */}
-          {brief && brief.engagement_blueprint && (
+          {brief && brief.engagement_blueprint && selectedProfile !== 'cinematic_series' && (
             <div className="border border-[#2A2A38] rounded-lg overflow-hidden bg-[#111118]">
               <button
                 type="button"

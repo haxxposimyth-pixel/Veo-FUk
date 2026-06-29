@@ -48,14 +48,14 @@ export const projectsApi = {
     return request<any>(`/projects/${id}/usage`);
   },
 
-  generateConcept(data: { title: string; language?: string; audience?: string; length?: string; content_profile?: string }) {
+  generateConcept(data: { title: string; language?: string; audience?: string; length?: string; content_profile?: string; content_type?: string }) {
     return request<any>('/concept/generate', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  regenerateConceptTopic(data: { title: string; chosenTitle: string; language?: string; audience?: string; current_content_type?: string; content_profile?: string }) {
+  regenerateConceptTopic(data: { title: string; chosenTitle: string; language?: string; audience?: string; current_content_type?: string; content_profile?: string; content_type?: string }) {
     return request<any>('/concept/regenerate-topic', {
       method: 'POST',
       body: JSON.stringify(data),
