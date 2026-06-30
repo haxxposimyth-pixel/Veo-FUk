@@ -82,6 +82,15 @@ app.get('/api/v1/stream/:projectId/:agentName', (req: Request, res: Response) =>
 
   res.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
 
+  const usesLock = agentName.startsWith('VeoAgent_') || agentName.startsWith('SceneAgent_');
+  if (usesLock) {
+    const lock = ProjectLockManager.getLock(projectId);
+    const isLockHeldByMe = lock && lock.agentName === agentName;
+    if (!isLockHeldByMe) {
+      res.write(`data: ${JSON.stringify({ type: 'done', data: '' })}\n\n`);
+    }
+  }
+
   req.on('close', () => {
     sseClients.delete(key);
     logger.info(`SSE disconnected: ${key}`);
