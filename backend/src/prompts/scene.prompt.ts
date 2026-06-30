@@ -255,9 +255,10 @@ Use the following Production Bible dossiers for matching characters, settings, a
 ${JSON.stringify(dossierBible, null, 2)}
 
 CRITICAL CHARACTER CONSTRAINTS:
-The "visual_state_snapshot.characters_present" array may ONLY contain character names from the official Production Bible character roster.
-The exact valid roster character names you are allowed to put in this array are: [${rosterNames}].
-Generic crowds, background people, or unlisted groups (e.g., "townsfolk", "crowd", "children", "people", "bystanders", "villagers", "passersby", "passers-by", "pedestrians", "kids", "audience", "crowds") must NOT be included in the "characters_present" array. Describe generic or background characters solely within the "scene_description" or background text; do not list them as character entities in the snapshot. You are strictly forbidden from inventing new character names or adding generic group titles to the characters list.`;
+1. You MAY reference EXISTING roster character IDs (e.g. CHAR_001) in the structured "character_ids_present" array (and their corresponding names in "visual_state_snapshot.characters_present") when that archetypal character appears in the scene, so the veo-agent can inject the character's appearance_lock.
+2. The "visual_state_snapshot.characters_present" array may ONLY contain character names from the official Production Bible character roster (e.g., [${rosterNames}]).
+3. Generic crowds, background people, or unlisted groups (e.g., "townsfolk", "crowd", "children", "people", "bystanders", "villagers", "passersby", "passers-by", "pedestrians", "kids", "audience", "crowds") must NOT be included in the "characters_present" or "character_ids_present" arrays. Describe generic or background characters solely within the "scene_description" or background text; do not list them as character entities.
+4. You are strictly forbidden from INVENTING new character entities or names not in the official roster.`;
 
   if (profile && profile.id === 'documentary') {
     prompt += `\n\nDOCUMENTARY VISUAL INSTRUCTION: Since this is a documentary project, ensure every scene_description depicts a wide process, system, or operational setting (e.g., factories, logistics, machinery, environment, scale, human activity) instead of a simple close-up of a standalone object. Only use close-ups as secondary/supporting details.`;

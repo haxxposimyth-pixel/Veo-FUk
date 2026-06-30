@@ -68,6 +68,27 @@ const LANGUAGES = [
   { value: 'Danish', label: 'Danish (Dansk)' },
 ];
 
+const REGIONS = [
+  { value: 'auto', label: 'Auto (match language)' },
+  { value: 'United States', label: 'United States' },
+  { value: 'India', label: 'India' },
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'China', label: 'China' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'France', label: 'France' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Middle East', label: 'Middle East' },
+  { value: 'Indonesia', label: 'Indonesia' },
+  { value: 'Russia', label: 'Russia' },
+  { value: 'Thailand', label: 'Thailand' },
+];
+
 const VIDEO_TYPES = [
   { value: 'auto', label: 'Auto (let the planner decide)' },
   { value: 'narrative', label: 'Narrative (story with characters)' },
@@ -102,6 +123,7 @@ export const ProjectSetup: React.FC = () => {
   const [visualStyleSelect, setVisualStyleSelect] = useState('Cinematic Realism');
   const [customStyle, setCustomStyle] = useState('');
   const [language, setLanguage] = useState('English');
+  const [region, setRegion] = useState('auto');
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [contentType, setContentType] = useState('auto');
   const [youtubeTranscript, setYoutubeTranscript] = useState('');
@@ -157,6 +179,7 @@ export const ProjectSetup: React.FC = () => {
 
       setTopic(activeProject.topic);
       setLanguage(activeProject.narration_language);
+      setRegion(activeProject.region || 'auto');
       setAspectRatio(activeProject.aspect_ratio);
       setContentType(activeProject.content_type || 'auto');
       setYoutubeTranscript(activeProject.youtube_transcript || '');
@@ -247,6 +270,7 @@ export const ProjectSetup: React.FC = () => {
         topic,
         visual_style: finalVisualStyle,
         narration_language: language,
+        region: region,
         aspect_ratio: aspectRatio,
         content_type: 'narrative',
         content_profile: 'cinematic_series',
@@ -258,6 +282,7 @@ export const ProjectSetup: React.FC = () => {
         topic,
         visual_style: activeStyle,
         narration_language: language,
+        region: region,
         aspect_ratio: aspectRatio,
         content_type: contentType,
         youtube_transcript: youtubeTranscript || undefined,
@@ -965,6 +990,18 @@ export const ProjectSetup: React.FC = () => {
               options={LANGUAGES}
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
+            />
+          </Card>
+
+          {/* Target Region */}
+          <Card className="space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Target Region
+            </h3>
+            <Select
+              options={REGIONS}
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
             />
           </Card>
 

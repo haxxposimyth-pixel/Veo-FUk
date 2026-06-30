@@ -61,6 +61,7 @@ export class StoryPlannerAgent extends BaseAgent {
     // Thread project.movie_config into story planner
     const project = ProjectRepository.findById(projectId);
     const movieConfig = project?.movie_config;
+    const region = project?.region || 'auto';
 
     const systemPrompt = getStoryPlanSystemPrompt(profile);
     const userPrompt   = getStoryPlanUserPrompt(
@@ -73,7 +74,8 @@ export class StoryPlannerAgent extends BaseAgent {
       engagementBlueprint,
       profile,
       movieConfig,
-      project?.target_duration_minutes
+      project?.target_duration_minutes,
+      region
     );
 
     const schemaToUse = contentProfileId === 'cinematic_series'

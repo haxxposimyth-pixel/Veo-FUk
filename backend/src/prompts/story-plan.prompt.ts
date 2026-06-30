@@ -68,7 +68,7 @@ RULES (non-negotiable):
 2. Characters (OPTIONAL — only if the story genuinely needs recurring people):
    - Resolve the video type. The user may specify it; if it is "auto", YOU classify it as one of: narrative, documentary, presenter, montage.
    - narrative  → 1–5 characters.
-   - documentary/explainer/montage → 0 characters in almost all cases (factory tours, product/science/data, nature, "how X works"). Do NOT invent people. Put the richness into locations, objects, and the process/sequence instead.
+   - documentary/explainer/montage → 0 characters in almost all cases (factory tours, product/science/data, nature, "how X works") UNLESS the documentary features recurring anonymous human operators or workers across multiple scenes. In those cases, you may identify recurring ANONYMOUS archetypal ROLES (e.g. "Market Vendor", "Dock Worker", "Truck Driver") to maintain visual consistency. Do NOT invent named or specific real individuals, and use generic role-based names only. If the documentary has no people (e.g. pure product, science, data, or nature), keep the character_list empty. Put the primary richness in locations, objects, and the process/sequence; archetypes are strictly supplementary.
    - presenter/talking-head → EXACTLY 1 character: the on-screen narrator/host.
    - montage → voiceover + B-roll-driven structure, ZERO required characters.
    - Output the resolved type in a top-level "video_type" field.
@@ -112,7 +112,8 @@ export function getStoryPlanUserPrompt(
   engagementBlueprint?: any,
   profile?: ContentProfileConfig,
   movieConfig?: any,
-  targetDurationMinutes?: number
+  targetDurationMinutes?: number,
+  region: string = 'auto'
 ): string {
   if (profile?.id === 'cinematic_series') {
     let prompt = `Create a Cinematic Story Plan for this project:
@@ -160,7 +161,7 @@ Content Profile: "cinematic_series"`;
 - Payoff (resolve by the outro): ${engagementBlueprint.payoff}`;
     }
 
-    const cultural = buildCulturalInstruction(language);
+    const cultural = buildCulturalInstruction(language, region);
     if (cultural) {
       prompt += `\n\n${cultural}`;
     }
@@ -202,7 +203,7 @@ Instructions:
 * Ensure the emotional driver is integrated into the narrative arc.`;
   }
 
-  const cultural = buildCulturalInstruction(language);
+  const cultural = buildCulturalInstruction(language, region);
   if (cultural) {
     prompt += `\n\n${cultural}`;
   }

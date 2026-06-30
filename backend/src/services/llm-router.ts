@@ -102,9 +102,10 @@ export function sanitizeModel(modelName: string): string {
     clean.includes('1.5') ||
     clean.includes('preview') ||
     clean === 'gemini-pro' ||
-    clean === 'gemini-pro-latest'
+    clean === 'gemini-pro-latest' ||
+    clean.includes('gemini-2.0-flash')
   ) {
-    console.warn(`[LLMRouter] Intercepted deprecated model '${modelName}' from settings. Forcing to 'gemini-2.5-flash'.`);
+    console.warn(`[LLMRouter] Intercepted deprecated/unsupported model '${modelName}' from settings. Forcing to 'gemini-2.5-flash'.`);
     return 'gemini-2.5-flash';
   }
   return modelName;

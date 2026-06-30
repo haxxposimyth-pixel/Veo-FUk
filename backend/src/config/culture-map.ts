@@ -1,5 +1,46 @@
 export interface CulturalContext { region: string; exampleNames: string; }
 
+export const REGIONS = [
+  { value: 'auto', label: 'Auto (match language)' },
+  { value: 'United States', label: 'United States' },
+  { value: 'India', label: 'India' },
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'China', label: 'China' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'France', label: 'France' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Middle East', label: 'Middle East' },
+  { value: 'Indonesia', label: 'Indonesia' },
+  { value: 'Russia', label: 'Russia' },
+  { value: 'Thailand', label: 'Thailand' },
+];
+
+const REGION_MAP: Record<string, CulturalContext> = {
+  'United States': { region: 'the United States', exampleNames: 'James, Emily, John, Sarah' },
+  'India': { region: 'India', exampleNames: 'Arjun, Priya, Rohan, Meera, Vikram, Ananya' },
+  'United Kingdom': { region: 'the United Kingdom', exampleNames: 'Oliver, Olivia, George, Amelia' },
+  'Canada': { region: 'Canada', exampleNames: 'Liam, Olivia, Logan, Charlotte' },
+  'Australia': { region: 'Australia', exampleNames: 'Jack, Charlotte, William, Amelia' },
+  'Japan': { region: 'Japan', exampleNames: 'Haruto, Yui, Sota, Aoi' },
+  'South Korea': { region: 'South Korea', exampleNames: 'Minjun, Seoyeon, Jihu, Hana' },
+  'China': { region: 'China', exampleNames: 'Wei, Mei, Hao, Lin' },
+  'Spain': { region: 'Spain', exampleNames: 'Mateo, Sofía, Diego, Valentina' },
+  'France': { region: 'France', exampleNames: 'Lucas, Camille, Hugo, Léa' },
+  'Germany': { region: 'Germany', exampleNames: 'Lukas, Hannah, Felix, Mia' },
+  'Brazil': { region: 'Brazil', exampleNames: 'Lucas, Beatriz, Gabriel, Larissa' },
+  'Mexico': { region: 'Mexico', exampleNames: 'Santiago, Sofía, Sebastián, Valentina' },
+  'Middle East': { region: 'the Arab world / Middle East', exampleNames: 'Omar, Layla, Khalid, Fatima' },
+  'Indonesia': { region: 'Indonesia', exampleNames: 'Budi, Sari, Adi, Dewi' },
+  'Russia': { region: 'Russia', exampleNames: 'Dmitry, Elena, Sergey, Maria' },
+  'Thailand': { region: 'Thailand', exampleNames: 'Somchai, Sunee, Kitti, Malee' },
+};
+
 const LANGUAGE_REGION_MAP: Record<string, CulturalContext> = {
   english:   { region: 'English-speaking regions (US/UK/Canada/Australia/etc.)', exampleNames: 'James, Emily, John, Sarah' },
   hindi:     { region: 'India', exampleNames: 'Arjun, Priya, Rohan, Meera, Vikram, Ananya' },
@@ -21,7 +62,18 @@ const LANGUAGE_REGION_MAP: Record<string, CulturalContext> = {
   thai:      { region: 'Thailand', exampleNames: 'Somchai, Sunee, Kitti, Malee' },
 };
 
-export function getCulturalContext(language: string): CulturalContext | null {
+export function getCulturalContext(language: string, region?: string): CulturalContext | null {
+  if (region && region.trim().toLowerCase() !== 'auto') {
+    const key = region.trim();
+    if (REGION_MAP[key]) {
+      return REGION_MAP[key];
+    }
+    return {
+      region: key,
+      exampleNames: `authentic, common names from ${key} in Latin script`,
+    };
+  }
+
   if (!language) return null;
   const key = language.trim().toLowerCase();
   const normalizedKey = key === 'en' ? 'english' : key;
@@ -31,8 +83,8 @@ export function getCulturalContext(language: string): CulturalContext | null {
   };
 }
 
-export function buildCulturalInstruction(language: string): string {
-  const ctx = getCulturalContext(language);
+export function buildCulturalInstruction(language: string, region?: string): string {
+  const ctx = getCulturalContext(language, region);
   if (!ctx) return '';
   return [
     '===== CULTURAL SETTING (CONDITIONAL DEFAULT) =====',

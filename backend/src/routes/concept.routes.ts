@@ -9,7 +9,7 @@ const router = Router();
 
 // POST /api/v1/concept/generate
 router.post('/concept/generate', async (req: Request, res: Response) => {
-  const { title, language, audience, length, profileDefaultKey, content_profile, content_type } = req.body;
+  const { title, language, region, audience, length, profileDefaultKey, content_profile, content_type } = req.body;
 
   if (!title || title.trim() === '') {
     res.status(400).json({ success: false, error: 'Title is required' });
@@ -35,7 +35,8 @@ router.post('/concept/generate', async (req: Request, res: Response) => {
       settings.apiKey,
       undefined,
       content_profile,
-      content_type
+      content_type,
+      region || 'auto'
     );
     
     const profile = resolveContentProfile(content_profile || 'viral_story');
@@ -67,7 +68,7 @@ router.post('/concept/generate', async (req: Request, res: Response) => {
 
 // POST /api/v1/concept/regenerate-topic
 router.post('/concept/regenerate-topic', async (req: Request, res: Response) => {
-  const { title, chosenTitle, language, audience, current_content_type, profileDefaultKey, content_profile, content_type } = req.body;
+  const { title, chosenTitle, language, region, audience, current_content_type, profileDefaultKey, content_profile, content_type } = req.body;
 
   if (!title || !chosenTitle) {
     res.status(400).json({ success: false, error: 'title and chosenTitle are required' });
@@ -92,7 +93,8 @@ router.post('/concept/regenerate-topic', async (req: Request, res: Response) => 
       audience || '',
       settings.apiKey,
       content_profile,
-      content_type
+      content_type,
+      region || 'auto'
     );
     
     let style = null;

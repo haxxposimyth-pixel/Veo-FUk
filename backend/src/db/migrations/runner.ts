@@ -131,6 +131,13 @@ export function runMigrations(): void {
       console.log('  ✓ Added movie_config column to projects table');
     }
 
+    // Migration: Add region to projects
+    const hasRegion = (db.prepare("PRAGMA table_info(projects)").all() as any[]).some((col: any) => col.name === 'region');
+    if (!hasRegion) {
+      db.prepare("ALTER TABLE projects ADD COLUMN region TEXT NOT NULL DEFAULT 'auto'").run();
+      console.log('  ✓ Added region column to projects table');
+    }
+
     const hasRenderFamily = (db.prepare("PRAGMA table_info(custom_styles)").all() as any[]).some((col: any) => col.name === 'render_family');
     if (!hasRenderFamily) {
       db.prepare("ALTER TABLE custom_styles ADD COLUMN render_family TEXT").run();

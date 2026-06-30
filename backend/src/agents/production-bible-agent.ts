@@ -293,6 +293,7 @@ export class ProductionBibleAgent extends BaseAgent {
     const proj = ProjectRepository.findById(projectId);
     const profileKey = proj?.content_profile || 'viral_story';
     const profile = resolveContentProfile(profileKey);
+    const region = proj?.region || 'auto';
 
     let resolvedVideoType = 'documentary';
     if (storyPlan?.video_type && storyPlan.video_type !== 'auto') {
@@ -352,7 +353,8 @@ export class ProductionBibleAgent extends BaseAgent {
         profileTreatment,
         groundedProductFacts,
         'cinematic_series',
-        proj?.movie_config
+        proj?.movie_config,
+        region
       );
     } else {
       systemPrompt = applyBibleSystemPromptModifications(getBibleSystemPrompt());
@@ -365,7 +367,10 @@ export class ProductionBibleAgent extends BaseAgent {
         storyPlan,
         resolvedVideoType,
         profileTreatment,
-        groundedProductFacts
+        groundedProductFacts,
+        undefined,
+        undefined,
+        region
       );
     }
 

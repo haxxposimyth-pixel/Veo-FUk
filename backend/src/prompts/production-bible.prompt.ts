@@ -171,9 +171,9 @@ AESTHETIC RULES (non-negotiable):
 RULES (non-negotiable):
 1. Characters  → driven by the story plan's video_type:
    - narrative  → 3–6 entries.
-   - documentary → 0 entries (empty character_roster) UNLESS the story plan explicitly lists recurring people. NEVER invent characters that are not in the story plan.
+   - documentary → If the approved story plan's character_list contains archetypal roles, you MUST create matching character_roster entries for them — each with a complete appearance_lock (detailing uniform/clothing, safety gear, age group, build, and typical features) to ensure cross-scene visual consistency. Keep the hard rule: NEVER invent characters not in the story plan, and NEVER create named or specific real individuals (use anonymous archetypes only). If the story plan's character_list is empty, the character_roster must remain empty [].
    - presenter  → EXACTLY 1 entry: the on-screen narrator with is_narrator:true.
-   Follow the approved story plan's character_list as the source of truth: if it has 0 characters, character_roster MUST be []. If the plan has characters, detail them.
+   - Follow the approved story plan's character_list as the source of truth: if it has 0 characters, character_roster MUST be []. If the plan has characters, detail them.
 2. Locations   → 3–8 entries, IDs: LOC_001, LOC_002, …
 3. Objects     → 2–6 entries, IDs: OBJ_001, OBJ_002, … Limit this registry to relevance-based objects only: register hero props and objects that RECUR across multiple scenes or are story-critical. Do NOT pad or inventory one-off background props. Ensure the story's key/most important prop(s) are flagged as "is_hero_prop": true with a dense, detailed "visual_lock" string (specifying locked materials, colors, clean engravings/patterns with absolutely no text, lettering, or logos unless it is a branded product with is_branded_product = true, in which case detail its real branding).
 
@@ -183,7 +183,7 @@ RULES (non-negotiable):
    - film_grain        : true / false
    - camera_movement_style : descriptive string
    - lighting_style    : descriptive string
-   - veo_style_tokens  : 5–8 style-appropriate visual tokens (e.g. for live-action: "35mm anamorphic prime", "Kodak Vision3 500T"; for 3D animation: "subsurface scattering", "soft shading", "virtual camera depth cue")
+   - veo_style_tokens  : 5–8 style-appropriate visual tokens (e.g. for live-action: "35mm anamorphic prime", "Kodak Vision3 500T"; for 3D animation: "subsurface scattering", "soft shading", "virtual camera depth cue"). These tokens must be DURABLE aesthetic descriptors (film stock/grade, lens character, color treatment, grain, contrast, depth of field) and must NOT include transient/atmospheric particulates or weather textures (e.g., "dust", "volumetric dust", "dusty atmosphere", "haze", "smoke") which are handled per-scene.
    - forbidden_elements: 3–6 things that must NEVER appear (e.g. elements that clash with the chosen aesthetic. If Pixar 3D, forbid photorealistic live-action, flat 2D shapes, vector style, or watercolor brushstrokes. If live-action, forbid stop-motion, claymation, cartoon, etc. Always forbid "modern logo", "smartphone screen", "text watermark").
    - render_style      : The render look/aesthetic (e.g. "photorealistic live-action cinematic", "Pixar-style 3D animation", "hand-drawn 2D anime", "claymation")
    - film_stock_grade  : e.g. "Kodak Vision3 5219 / 500T" (or "N/A" for stylized/animation)
@@ -330,7 +330,8 @@ export function getBibleUserPrompt(
   profileTreatment: string = 'narrative',
   groundedProductFacts?: string,
   contentProfile?: string,
-  movieConfig?: any
+  movieConfig?: any,
+  region: string = 'auto'
 ): string {
   if (contentProfile === 'cinematic_series') {
     let prompt = `Create a complete Cinematic Production Bible for this project:
@@ -377,7 +378,7 @@ Content Profile: "cinematic_series"`;
       prompt += `\n\nReference YouTube Transcript:\n"""\n${youtubeTranscript}\n"""`;
     }
 
-    const cultural = buildCulturalInstruction(language);
+    const cultural = buildCulturalInstruction(language, region);
     if (cultural) {
       prompt += `\n\n${cultural}`;
     }
@@ -424,7 +425,7 @@ Requirements:
     prompt += `\n\nReference YouTube Transcript (use this text as the primary factual source, style guide, and narrative structure for characters, settings, and props):\n"""\n${youtubeTranscript}\n"""`;
   }
 
-  const cultural = buildCulturalInstruction(language);
+  const cultural = buildCulturalInstruction(language, region);
   if (cultural) {
     prompt += `\n\n${cultural}`;
   }

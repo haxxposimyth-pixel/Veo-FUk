@@ -31,7 +31,7 @@ export function verifySchema(): void {
     veo_prompts: ['id', 'project_id', 'scene_id', 'phase_number', 'scene_number', 'prompt_number', 'visual', 'shot', 'shot_type', 'lens', 'lighting', 'camera', 'ambient_sound', 'sfx', 'dialogue', 'avoid', 'connection', 'narration', 'raw_json', 'version', 'scene_type'],
     phases: ['id', 'project_id', 'phase_number', 'phase_type', 'phase_title', 'phase_content', 'approved', 'scenes_generated', 'status', 'narration_text', 'narration_word_count'],
     scenes: ['id', 'project_id', 'phase_id', 'phase_number', 'scene_number', 'title', 'scene_description', 'continuity_notes', 'narration_fragment', 'veo_prompt_generated', 'status', 'narration_word_count', 'raw_json', 'continuity_stale'],
-    projects: ['id', 'title', 'topic', 'visual_style', 'narration_language', 'aspect_ratio', 'status', 'style_id', 'target_duration_minutes'],
+    projects: ['id', 'title', 'topic', 'visual_style', 'narration_language', 'region', 'aspect_ratio', 'status', 'style_id', 'target_duration_minutes'],
     video_metadata: ['id', 'project_id', 'raw_json', 'selected_title', 'description', 'chapters', 'tags', 'hashtags', 'thumbnail_hook'],
   };
 

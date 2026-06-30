@@ -83,6 +83,7 @@ export interface Project {
   topic: string;
   visual_style: string;
   narration_language: string;
+  region?: string;
   aspect_ratio: string;
   content_type: string;
   content_profile?: string;

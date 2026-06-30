@@ -10,7 +10,7 @@ export const projectsApi = {
     return request<Project>(`/projects/${id}`);
   },
 
-  createProject(data: { title: string; topic: string; visual_style: string; narration_language: string; aspect_ratio: string; youtube_transcript?: string | null; content_type?: string; content_profile?: string; concept_brief?: string | null; style_id?: string | null }) {
+  createProject(data: { title: string; topic: string; visual_style: string; narration_language: string; region?: string; aspect_ratio: string; youtube_transcript?: string | null; content_type?: string; content_profile?: string; concept_brief?: string | null; style_id?: string | null }) {
     return request<Project>('/projects', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -48,14 +48,14 @@ export const projectsApi = {
     return request<any>(`/projects/${id}/usage`);
   },
 
-  generateConcept(data: { title: string; language?: string; audience?: string; length?: string; content_profile?: string; content_type?: string }) {
+  generateConcept(data: { title: string; language?: string; region?: string; audience?: string; length?: string; content_profile?: string; content_type?: string }) {
     return request<any>('/concept/generate', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  regenerateConceptTopic(data: { title: string; chosenTitle: string; language?: string; audience?: string; current_content_type?: string; content_profile?: string; content_type?: string }) {
+  regenerateConceptTopic(data: { title: string; chosenTitle: string; language?: string; region?: string; audience?: string; current_content_type?: string; content_profile?: string; content_type?: string }) {
     return request<any>('/concept/regenerate-topic', {
       method: 'POST',
       body: JSON.stringify(data),

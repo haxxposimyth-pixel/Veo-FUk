@@ -45,6 +45,47 @@ const PRESET_STYLES = [
   { value: 'Architectural Minimalism', label: 'Architectural Minimalism' },
 ];
 
+const LANGUAGES = [
+  { value: 'English', label: 'English' },
+  { value: 'Spanish', label: 'Spanish (Español)' },
+  { value: 'French', label: 'French (Français)' },
+  { value: 'German', label: 'German (Deutsch)' },
+  { value: 'Italian', label: 'Italian (Italiano)' },
+  { value: 'Portuguese', label: 'Portuguese (Português)' },
+  { value: 'Dutch', label: 'Dutch (Nederlands)' },
+  { value: 'Russian', label: 'Russian (Русский)' },
+  { value: 'Chinese', label: 'Chinese (中文)' },
+  { value: 'Japanese', label: 'Japanese (日本語)' },
+  { value: 'Korean', label: 'Korean (한국어)' },
+  { value: 'Arabic', label: 'Arabic (العربية)' },
+  { value: 'Hindi', label: 'Hindi (हिन्दी)' },
+  { value: 'Bengali', label: 'Bengali (বাংলা)' },
+  { value: 'Turkish', label: 'Turkish (Türkçe)' },
+  { value: 'Vietnamese', label: 'Vietnamese (Tiếng Việt)' },
+  { value: 'Polish', label: 'Polish (Polski)' },
+];
+
+const REGIONS = [
+  { value: 'auto', label: 'Auto (match language)' },
+  { value: 'United States', label: 'United States' },
+  { value: 'India', label: 'India' },
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'China', label: 'China' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'France', label: 'France' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Mexico', label: 'Mexico' },
+  { value: 'Middle East', label: 'Middle East' },
+  { value: 'Indonesia', label: 'Indonesia' },
+  { value: 'Russia', label: 'Russia' },
+  { value: 'Thailand', label: 'Thailand' },
+];
+
 const PROFILE_LABELS: Record<string, string> = {
   auto: 'Auto',
   viral_story: 'Viral Story',
@@ -146,6 +187,7 @@ export const Dashboard: React.FC = () => {
       visual_style: settings?.defaultVisualStyle || 'Cinematic Realism',
       style_id: '',
       narration_language: settings?.defaultLanguage || 'English',
+      region: 'auto',
       aspect_ratio: (settings?.defaultAspectRatio || '16:9') as any,
       content_type: 'auto',
       content_profile: 'viral_story',
@@ -187,10 +229,12 @@ export const Dashboard: React.FC = () => {
     }, 2000);
 
     try {
-      const defaultLanguage = settings?.defaultLanguage || 'English';
+      const language = watch('narration_language') || settings?.defaultLanguage || 'English';
+      const region = watch('region') || 'auto';
       const response = await projectsApi.generateConcept({
         title: watchTitle,
-        language: defaultLanguage,
+        language,
+        region,
         content_profile: watch('content_profile') || 'viral_story',
         content_type: watch('content_type') || 'auto',
       });
@@ -245,11 +289,13 @@ export const Dashboard: React.FC = () => {
 
     setBriefLoadingState('writing');
     try {
-      const defaultLanguage = settings?.defaultLanguage || 'English';
+      const language = watch('narration_language') || settings?.defaultLanguage || 'English';
+      const region = watch('region') || 'auto';
       const response = await projectsApi.regenerateConceptTopic({
         title: watchTitle,
         chosenTitle,
-        language: defaultLanguage,
+        language,
+        region,
         current_content_type: brief.content_type,
         content_profile: watch('content_profile') || 'viral_story',
       });
@@ -765,6 +811,22 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* Language & Region Selects */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Select
+              label="Narration Language"
+              options={LANGUAGES}
+              error={errors.narration_language?.message}
+              {...register('narration_language')}
+            />
+            <Select
+              label="Target Region"
+              options={REGIONS}
+              error={errors.region?.message}
+              {...register('region')}
+            />
+          </div>
 
           {/* Profile & Type Selects */}
           {selectedProfile === 'cinematic_series' ? (

@@ -599,7 +599,7 @@ export const veoPromptAgentOutputSchema = z
     connection:       z.string(),
     narration:        z.string().min(0),
     duration_seconds: z.coerce.number().int().optional(),
-    action_arc:       z.string().describe('A temporal Start->Motion->End description of one continuous ~8s action (e.g. locomotive enters frame from left, accelerates as ballast dust lifts, sunlight rakes across the steel flank, settling as the rear power car clears the curve). Must stay one continuous shot with no scene cuts inside.'),
+    action_arc:       z.string().describe('A temporal Start->Motion->End description of one continuous ~8s action (e.g. locomotive enters frame from left, accelerates as dry leaves scatter in the draft, sunlight glints across the steel flank, settling as the rear power car clears the curve). Must stay one continuous shot with no scene cuts inside.'),
     in_clip_transition: z.string().optional(),
     scene_type:       z.enum(['rapid_cut', 'standard', 'short_punch', 'slow_burn']).optional().default('standard'),
     veo_full_prompt:  z.string().optional(),

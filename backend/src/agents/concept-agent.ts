@@ -26,6 +26,7 @@ export class ConceptAgent extends BaseAgent {
     onChunk?: (chunk: string) => void,
     contentProfile?: string,
     contentType?: string,
+    region: string = 'auto',
   ): Promise<ConceptBrief> {
     const resolvedModel = AGENT_MODEL_MAPPING['ConceptAgent'] || 'gemini-2.5-pro';
     const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
@@ -77,7 +78,7 @@ export class ConceptAgent extends BaseAgent {
     // Step 2: Generate brief using prompt
     onChunk?.('Writing brief…\n');
     const systemPrompt = getConceptSystemPrompt(language, resolvedContentProfile, movieConfig, resolvedContentType);
-    const userPrompt = getConceptUserPrompt(title, language, audience, length, groundedFacts, resolvedContentProfile, movieConfig, resolvedContentType);
+    const userPrompt = getConceptUserPrompt(title, language, region, audience, length, groundedFacts, resolvedContentProfile, movieConfig, resolvedContentType);
 
     const brief = await this.generateStructured<ConceptBrief>(
       null, // projectId is null for new projects
@@ -107,6 +108,7 @@ export class ConceptAgent extends BaseAgent {
     apiKey?: string,
     contentProfile?: string,
     contentType?: string,
+    region: string = 'auto',
   ): Promise<any> {
     const resolvedModel = AGENT_MODEL_MAPPING['ConceptAgent'] || 'gemini-2.5-pro';
     const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
@@ -154,7 +156,7 @@ export class ConceptAgent extends BaseAgent {
     }
 
     const systemPrompt = getConceptSystemPrompt(language, resolvedContentProfile, movieConfig, resolvedContentType);
-    const userPrompt = getConceptTopicOnlyPrompt(title, chosenTitle, language, audience, groundedFacts, resolvedContentProfile, movieConfig, resolvedContentType);
+    const userPrompt = getConceptTopicOnlyPrompt(title, chosenTitle, language, region, audience, groundedFacts, resolvedContentProfile, movieConfig, resolvedContentType);
 
     const updated = await this.generateStructured<any>(
       null,

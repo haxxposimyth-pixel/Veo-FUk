@@ -168,6 +168,7 @@ Return ONLY raw JSON — no markdown fences, no prose before or after.`;
 export function getConceptUserPrompt(
   title: string,
   language: string,
+  region: string = 'auto',
   audience: string = '',
   length: string = '',
   groundedFacts?: string | null,
@@ -209,7 +210,7 @@ Length    : "${length || 'auto'}"`;
   GOAL OF THE VIDEO: ...
 - Write all other fields in ENGLISH (Latin script).`;
 
-    const cultural = buildCulturalInstruction(language);
+    const cultural = buildCulturalInstruction(language, region);
     if (cultural) {
       prompt += `\n\n${cultural}`;
     }
@@ -243,7 +244,7 @@ Length    : "${length || 'auto'}"`;
     prompt += `\n- The Content Profile is locked to: "${contentProfile}". You MUST set "content_profile": "${contentProfile}" in the output.`;
   }
 
-  const cultural = buildCulturalInstruction(language);
+  const cultural = buildCulturalInstruction(language, region);
   if (cultural) {
     prompt += `\n\n${cultural}`;
   }
@@ -255,6 +256,7 @@ export function getConceptTopicOnlyPrompt(
   title: string,
   chosenTitle: string,
   language: string,
+  region: string = 'auto',
   audience: string = '',
   groundedFacts?: string | null,
   contentProfile?: string,
@@ -301,7 +303,7 @@ Return ONLY raw JSON with these fields:
 }
 Return ONLY raw JSON — no markdown fences, no prose before or after.`;
 
-    const cultural = buildCulturalInstruction(language);
+    const cultural = buildCulturalInstruction(language, region);
     if (cultural) {
       prompt += `\n\n${cultural}`;
     }
@@ -350,7 +352,7 @@ Return ONLY raw JSON with these fields:
 }
 Return ONLY raw JSON — no markdown fences, no prose before or after.`;
 
-  const cultural = buildCulturalInstruction(language);
+  const cultural = buildCulturalInstruction(language, region);
   if (cultural) {
     prompt += `\n\n${cultural}`;
   }
@@ -363,7 +365,8 @@ export function getStyleSelectionPrompt(
   contentType: string,
   language: string,
   existingStyles: { id: string; name: string; description: string; render_family?: string | null }[],
-  profileDefaultKey?: string
+  profileDefaultKey?: string,
+  region: string = 'auto'
 ): string {
   const stylesList = existingStyles.map((s, idx) => `${idx + 1}. ID: "${s.id}" • Name: "${s.name}" • Family: "${s.render_family || 'unknown'}" • Description: "${s.description}"`).join('\n');
 
@@ -426,7 +429,7 @@ Output when creating a NEW style:
 
 Ensure the output is STRICT JSON matching the schema.`;
 
-  const cultural = buildCulturalInstruction(language);
+  const cultural = buildCulturalInstruction(language, region);
   if (cultural) {
     prompt += `\n\n${cultural}`;
   }

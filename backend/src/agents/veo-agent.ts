@@ -244,7 +244,8 @@ function mapModelName(model: string): string {
     clean.includes('1.5') ||
     clean.includes('preview') ||
     clean === 'gemini-pro' ||
-    clean === 'gemini-pro-latest'
+    clean === 'gemini-pro-latest' ||
+    clean.includes('gemini-2.0-flash')
   ) {
     return 'gemini-2.5-flash';
   }
@@ -296,8 +297,8 @@ try {
   if (!settingsMap.has('backup_model_primary') || settingsMap.get('backup_model_primary') !== 'gemini-2.5-pro') {
     db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('backup_model_primary', 'gemini-2.5-pro', datetime('now'))").run();
   }
-  if (!settingsMap.has('backup_model_secondary') || settingsMap.get('backup_model_secondary') !== 'gemini-2.0-flash-001') {
-    db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('backup_model_secondary', 'gemini-2.0-flash-001', datetime('now'))").run();
+  if (!settingsMap.has('backup_model_secondary') || settingsMap.get('backup_model_secondary') !== 'gemini-1.5-flash') {
+    db.prepare("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ('backup_model_secondary', 'gemini-1.5-flash', datetime('now'))").run();
   }
 } catch (dbErr) {
   console.error('[VeoAgent] Failed to auto-initialize Gemini model settings in DB:', dbErr);

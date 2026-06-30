@@ -50,14 +50,15 @@ export const ProjectRepository = {
     const status: ProjectStatus = 'setup';
     const cleanedTopic = cleanTopicScaffolding(input.topic);
     db.prepare(`
-      INSERT INTO projects (id, title, topic, visual_style, narration_language, aspect_ratio, status, youtube_transcript, content_type, concept_brief, style_id, target_duration_minutes, content_profile, movie_config)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, title, topic, visual_style, narration_language, region, aspect_ratio, status, youtube_transcript, content_type, concept_brief, style_id, target_duration_minutes, content_profile, movie_config)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.title,
       cleanedTopic,
       input.visual_style,
       input.narration_language,
+      input.region || 'auto',
       input.aspect_ratio,
       status,
       input.youtube_transcript || null,
@@ -104,14 +105,15 @@ export const ProjectRepository = {
 
     const newId = crypto.randomUUID();
     db.prepare(`
-      INSERT INTO projects (id, title, topic, visual_style, narration_language, aspect_ratio, status, youtube_transcript, style_id, content_type, concept_brief, target_duration_minutes, content_profile, movie_config)
-      VALUES (?, ?, ?, ?, ?, ?, 'bible', ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, title, topic, visual_style, narration_language, region, aspect_ratio, status, youtube_transcript, style_id, content_type, concept_brief, target_duration_minutes, content_profile, movie_config)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'bible', ?, ?, ?, ?, ?, ?, ?)
     `).run(
       newId,
       `${original.title} (Copy)`,
       original.topic,
       original.visual_style,
       original.narration_language,
+      original.region || 'auto',
       original.aspect_ratio,
       original.youtube_transcript || null,
       (original as any).style_id || null,

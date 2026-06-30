@@ -214,12 +214,16 @@ export const ExportService = {
       
       md += `\n### Locations Roster\n`;
       bibleData.location_roster?.forEach((loc: any) => {
-        md += `- **${loc.name}** (${loc.type}): ${loc.atmosphere}. *Lighting:* ${loc.lighting_notes}. *Signature:* ${loc.visual_signature}\n`;
+        let line = `- **${loc.name}** (${loc.type}): ${loc.atmosphere}. *Lighting:* ${loc.lighting_notes}. *Signature:* ${loc.visual_signature}\n`;
+        line = line.replace(/\.{2,}/g, '.');
+        md += line;
       });
 
       md += `\n### Objects Registry\n`;
       bibleData.object_registry?.forEach((obj: any) => {
-        md += `- **${obj.name}**: ${obj.description}. *Symbolic Meaning:* ${obj.symbolic_meaning}. *Screen Time:* ${obj.screen_time}\n`;
+        let line = `- **${obj.name}**: ${obj.description}. *Symbolic Meaning:* ${obj.symbolic_meaning}. *Screen Time:* ${obj.screen_time}\n`;
+        line = line.replace(/\.{2,}/g, '.');
+        md += line;
       });
 
       md += `\n### Visual Style Lock\n`;
