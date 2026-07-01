@@ -103,6 +103,9 @@ RULES (non-negotiable):
     if (audienceDirectives) {
       prompt += `\n\n## AUDIENCE DIRECTIVES\n${audienceDirectives}`;
     }
+    prompt += `\n\n## FACTUAL HEDGING & GEOGRAPHIC CONSISTENCY RULES:
+- FACTUAL HEDGING (HARD RULE): When stating statistics, counts, numbers of incidents, or superlatives in documentaries/explainers, use hedged or relative approximations (e.g. "nearly three-quarters", "thousands of incidents", "one of the most dangerous") rather than inventing precise, fabricated numbers (e.g. do NOT say "exactly 73%", "452 deaths per year", "9.7 million tons"). Maintain the dramatic impact via specificity of the story, mechanism, and physical detail, NOT through false precision.
+- GEOGRAPHIC CONSISTENCY (HARD RULE): All named routes, passes, roads, regions, and cities must remain consistent throughout the script and follow a plausible, logically sequenced real-world journey. Do NOT present geographically distant locations (e.g. Zoji La Pass in Ladakh vs. Kishtwar Road in Jammu) as adjacent or consecutive parts of a single drive without explaining long travel. Reuse the same names consistently once introduced.`;
     return prompt.trim();
   }
   const rules = resolveLanguageRules(narrationLanguage);
@@ -226,6 +229,9 @@ RULES (non-negotiable):
   if (audienceDirectives) {
     prompt += `\n\n## AUDIENCE DIRECTIVES\n${audienceDirectives}`;
   }
+  prompt += `\n\n## FACTUAL HEDGING & GEOGRAPHIC CONSISTENCY RULES:
+- FACTUAL HEDGING (HARD RULE): When stating statistics, counts, numbers of incidents, or superlatives in documentaries/explainers, use hedged or relative approximations (e.g. "nearly three-quarters", "thousands of incidents", "one of the most dangerous") rather than inventing precise, fabricated numbers (e.g. do NOT say "exactly 73%", "452 deaths per year", "9.7 million tons"). Maintain the dramatic impact via specificity of the story, mechanism, and physical detail, NOT through false precision.
+- GEOGRAPHIC CONSISTENCY (HARD RULE): All named routes, passes, roads, regions, and cities must remain consistent throughout the script and follow a plausible, logically sequenced real-world journey. Do NOT present geographically distant locations (e.g. Zoji La Pass in Ladakh vs. Kishtwar Road in Jammu) as adjacent or consecutive parts of a single drive without explaining long travel. Reuse the same names consistently once introduced.`;
   return prompt.trim();
 }
 

@@ -145,6 +145,7 @@ Content Profile: "cinematic_series"`;
 - Output the detailed cinematic structure in the "raw_json" object.
 - Estimated Runtime MUST match the target duration of ${targetDurationMinutes || 10} minutes. Do not free-invent a feature film runtime (like 120 minutes) if the target duration is shorter.
 - The scene_count in raw_json must be grounded in this target duration (e.g. roughly 1-2 scenes per minute of screen time, meaning around ${Math.ceil((targetDurationMinutes || 10) * 1.5)} scenes).
+- GEOGRAPHIC CONSISTENCY RULE (HARD RULE): Ensure all locations and scenes follow a plausible, logically sequenced real-world journey. Do NOT present far-apart geographic locations (e.g. Zoji La Pass in Ladakh vs Kishtwar Road in Jammu) as adjacent or consecutive parts of a single drive without explaining long travel. Keep named routes, regions, and passes consistent.
 - Write ALL text (story_outline, character names, concepts, locations, objects) in ENGLISH (Latin script). The "${language}" value is the NARRATION language only and must NOT change the language of this plan.`;
 
     if (youtubeTranscript) {
@@ -183,6 +184,7 @@ Requirements:
 - Engagement Intensity must be: ${profile?.engagementIntensity || 'high'}.
 - If Video Type is 'auto', classify it yourself and return it in video_type. Otherwise honor it exactly (e.g. 'montage' means a voiceover + B-roll-driven structure with zero required characters).
 - Ensure characters, locations, and objects directly match the requested theme.
+- GEOGRAPHIC CONSISTENCY RULE (HARD RULE): Ensure all locations and scenes follow a plausible, logically sequenced real-world journey. Do NOT present far-apart geographic locations (e.g. Zoji La Pass in Ladakh vs Kishtwar Road in Jammu) as adjacent or consecutive parts of a single drive without explaining long travel. Keep named routes, regions, and passes consistent.
 - Write ALL text (story_outline, character names, concepts, locations, objects) in ENGLISH (Latin script). The "${language}" value is the NARRATION language only and must NOT change the language of this plan.`;
 
   if (youtubeTranscript) {

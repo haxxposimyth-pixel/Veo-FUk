@@ -57,7 +57,7 @@ export const getVeoSystemPrompt = (project: any, bible: any, profile?: ContentPr
   const cinematicRulesBlock = profile?.id === 'cinematic_series'
     ? `## CINEMATIC SERIES PIPELINE RULES:
 - DYNAMIC CAMERA ENERGY: Use high-energy, dramatic, and sweeping camera moves (e.g., dolly zooms, crane shots, handheld camera tracking, whip pans).
-- DRAMATIC LIGHTING & LENS FLARES: Describe cinematic lighting (e.g., high-contrast chiaroscuro, colorful neon backlighting, rim lighting, lens flares) to amplify drama and atmosphere.
+- DRAMATIC LIGHTING & OCCASIONAL LENS FLARES: Describe cinematic lighting (e.g., high-contrast chiaroscuro, colorful neon backlighting, rim lighting) to amplify drama and atmosphere. Use lens flares sparingly, ONLY when the scene is strongly backlit by direct sun or intense light sources; do not suggest lens flares as a default.
 - CREATURE SCALE & COMBAT CHOREOGRAPHY: Explicitly detail creature/monster size, power activation, aggressive action, and combat beats with clear physical choreography.
 - SNAPSHOT CONTINUITY CONSUMPTION: Pay close attention to the visual state snapshot fields:
   * character_damage: describe character injuries/wounds (e.g. "a bleeding slash wound on his left arm").
@@ -154,6 +154,7 @@ Design every field with this constraint in mind:
   - CONTEXT OVERRIDE: If the PROJECT CONTEXT, Visual Style, or Style Lock Guidelines contain any of the banned terms listed in the ABSOLUTE WORD BAN, you MUST ignore those specific terms and translate them into concrete visible elements instead. Do not copy them, their synonyms, or related meta-jargon into the Visual field.
   - BASE FOOTAGE ONLY: Describe ONLY the physical photorealistic scene or primary animated footage. NEVER instruct CGI overlays, infographics, HUDs, scale-comparison graphics (e.g., do NOT describe "CGI integration of multiple football fields" or "overlay showing data"), or screen overlays; those are added in post-production.
   - The output video must have a ${aspectRatio} aspect ratio.${aspectRatio === '9:16' ? ' For vertical 9:16 framing, ensure the subject is centered and action is vertically framed.' : ''}
+  - TERRAIN SIGNATURE RULE (MANDATORY): When the scene's setting is a named real-world location (e.g., Zoji La Pass, Kishtwar Road, or any specific mountain pass/dangerous road), the Visual description must depict that location's characteristic physical/geological terrain (such as muddy/slushy roads, loose grey shale, high snow embankments, sheer drop-offs, low hanging rocky cave ceilings) instead of a generic "narrow mountain road". Derive from the location's known real-world traits; if unknown, use specific, plausible terrain consistent with the region rather than generic filler.
 
   ${shotCompositionRule}
   ${cinematicRulesBlock ? '\n  ' + cinematicRulesBlock + '\n' : ''}
@@ -173,7 +174,7 @@ Design every field with this constraint in mind:
 - narration: This is the read-only post-production voiceover script fragment provided for the scene. You MUST return this string EXACTLY as provided in the user prompt input under "Narration". Do not edit, summarize, translate, or alter it in any way.
 
 - Avoid: List of 6 to 10 specific exclusions.
-  - Must always include verbatim: deformed hands, extra fingers, extra limbs, mutated anatomy, identity change, wardrobe change mid-shot, warped faces, text, watermark, logo, digital artifacts, smartphone screen, typography, written words, letters, brand names.
+  - Must always include verbatim: deformed hands, extra fingers, extra limbs, mutated anatomy, identity change, wardrobe change mid-shot, warped faces, subtitles, burned-in captions, hardcoded on-screen text, lower-thirds, UI overlays, watermarks, editorial graphics, digital artifacts, smartphone screen. (Note: Do NOT blanket-ban in-world diegetic text, real-world signage, painted vehicle art/slogans, license plates, road and shop signs, or branding that naturally appears on real objects; those are explicitly allowed).
   - If the scene involves scale, UI, data, comparison graphics, or overlays, you must also append: infographics, UI elements, HUD, glowing lines, vector graphics, motion-graphics overlays.
   - Must include scene-specific exclusions relevant to the Visual (e.g. anachronisms, wrong-era props, wrong lighting conditions).
   - Never contradict the Visual field (do not forbid an element the Visual intentionally includes).
@@ -197,8 +198,9 @@ ${adjectiveVarietyRule}
 
 LENS field:
 - EXACTLY ONE consolidated lens/camera descriptor per prompt. Do not scatter conflicting lens or camera model information across the Visual, Lens, and Look fields. If the Lens field specifies a lens (e.g., "35mm prime lens"), make sure the Visual and Look fields do not specify different lenses or contradictory brands.
-- If the project render_style is photorealistic live-action, you must specify a real physical lens focal length and an emotional effect (e.g. "85mm lens for intimate shallow depth of field", ${aspectRatio === '9:16' ? '"24mm spherical lens for dramatic portrait perspective distortion"' : '"18mm anamorphic lens for dramatic perspective distortion"'}). Derives from visual_style: cinematic/documentary uses 24mm-35mm primes; ASMR/intimate uses 85mm-100mm macro. ${aspectRatio === '9:16' ? 'CRITICAL: Since this project is vertical 9:16, do NOT use anamorphic or widescreen lens vocabulary; use spherical/standard prime lens vocabulary.' : ''}
-- If the project render_style is animated, stylized, 2D, or 3D, you must use style-appropriate virtual camera and visual language (e.g., "virtual wide lens, soft depth-of-field styling", "clean flat projection, isometric perspective") instead of physical lenses or camera brands (no Arri/Cooke realism).
+- LENS/DEPTH-OF-FIELD COUPLING RULE (HARD RULE): The lens and depth of field choice must match the TARGET SHOT SIZE. Wide/establishing/aerial shots MUST use wide prime/spherical lenses (e.g. 18mm to 28mm) and deep focus (e.g., "twenty-four millimeter lens for deep focus, keeping the entire scene sharp and in-focus"). For these wide shots, you must NEVER describe "shallow depth of field", "bokeh", "blurred background", or "shallow focus" in either the Lens or Visual fields. Medium shots can use 35mm-50mm lenses. Close-up and extreme close-up shots are allowed to use narrow lenses (e.g. 85mm-100mm) and shallow depth of field with soft, blurred background bokeh.
+- If the project render_style is photorealistic live-action, you must specify a real physical lens focal length and an emotional effect matching the target shot size (e.g. "85mm lens for intimate close-up with shallow depth of field", ${aspectRatio === '9:16' ? '"24mm spherical lens for dramatic wide-angle portrait perspective distortion"' : '"18mm anamorphic lens for dramatic wide-angle perspective distortion"'}). Derives from visual_style: cinematic/documentary uses 24mm-35mm primes; ASMR/intimate uses 85mm-100mm macro. ${aspectRatio === '9:16' ? 'CRITICAL: Since this project is vertical 9:16, do NOT use anamorphic or widescreen lens vocabulary; use spherical/standard prime lens vocabulary.' : ''}
+- If the project render_style is animated, stylized, 2D, or 3D, you must use style-appropriate virtual camera and visual language matching the target shot size (e.g., "virtual wide lens, deep focus styling", "virtual telephoto lens, soft depth-of-field styling", "clean flat projection, isometric perspective") instead of physical lenses or camera brands (no Arri/Cooke realism).
 
 LIGHTING field:
 - Must specify lighting source + direction + color temperature + shadow quality (e.g. "warm four-thousand Kelvin sunset light filtering from the left, casting deep, sharp shadows").
@@ -206,6 +208,7 @@ LIGHTING field:
 - If film_grain from Production Bible is true, include "natural film grain" in the lighting field.
 
 CAMERA VARIETY RULE:
+- CAMERA MOVEMENT SIMPLICITY RULE (HARD RULE): Describe ONLY the single assigned camera move in the Visual and Action Arc fields. Do NOT describe compound, stacked, or multiple camera movements (e.g., if the assigned move is 'Static', do not describe panning, tilting, orbiting, or handheld shake in the Visual or Action Arc; keep the camera movement simple and dedicated to that single action).
 - No camera movement may repeat in consecutive prompts.
 - Across any 7-prompt sequence: minimum 4 distinct camera movements required.
 - Banned combinations: slow dolly forward used more than twice in 7 prompts.
