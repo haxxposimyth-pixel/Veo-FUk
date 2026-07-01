@@ -482,6 +482,16 @@ export class SceneAgent extends BaseAgent {
     onChunk?: (chunk: string) => void,
     youtubeTranscript?: string | null
   ): Promise<SceneBreakdownData> {
+    const bRollVisuals = [
+      "The camera shifts to a close-up angle, highlighting the textures and subtle motions of the subject.",
+      "An alternative side profile view focusing on the physical form and immediate setting.",
+      "A wider camera perspective showing the subject within its surrounding environment.",
+      "A high-angle view looking down to capture the geometric alignment and spatial context.",
+      "A low-angle dramatic shot emphasizing the scale, height, and presence of the subject.",
+      "A macro insert shot focusing on a specific movement or intricate texture.",
+      "A tracking shot panning slowly across the surface, revealing additional details."
+    ];
+
     const narrationSource = phase.narration_text;
 
     if (!narrationSource || narrationSource.trim().length === 0) {
@@ -771,7 +781,7 @@ IMPORTANT NARRATION DISTRIBUTION RULES:
 2. For lists, montages, hooks, and climaxes, expand the narration into MULTIPLE scenes.
 3. Put the narration fragment ONLY on the lead scene(s).
 4. All subsequent b-roll scenes in the list/montage MUST have narration_fragment set to an empty string "". Do not repeat narration.
-5. Lead scenes with narration should target ~15-20 words, but silent b-roll scenes get exactly "".`;
+5. Lead scenes with narration should target ~12 words, but silent b-roll scenes get exactly "". You MUST split any narration chunk longer than ~15 words or more than 2 sentences into separate scenes, allocating one distinct visual to each scene.`;
 
     let finalResult: SceneBreakdownData | null = null;
     let splitScenes: any[] = [];
@@ -826,16 +836,6 @@ IMPORTANT NARRATION DISTRIBUTION RULES:
         const phaseTypeKey = (phase.phase_type || '').toLowerCase().trim();
         const phaseTypeFactor = PHASE_TYPE_DENSITY_MAP[phaseTypeKey] ?? 1.0;
         const finalPacingFactor = pacingFactor * phaseTypeFactor;
-
-        const bRollVisuals = [
-          "The camera shifts to a close-up angle, highlighting the textures and subtle motions of the subject.",
-          "An alternative side profile view focusing on the physical form and immediate setting.",
-          "A wider camera perspective showing the subject within its surrounding environment.",
-          "A high-angle view looking down to capture the geometric alignment and spatial context.",
-          "A low-angle dramatic shot emphasizing the scale, height, and presence of the subject.",
-          "A macro insert shot focusing on a specific movement or intricate texture.",
-          "A tracking shot panning slowly across the surface, revealing additional details."
-        ];
 
         const nonEvCount = result.scenes.filter((s: any) => (s.narration_fragment || '').trim().length > 0).length;
         if (result.scenes.length > 1) {
@@ -923,7 +923,12 @@ IMPORTANT NARRATION DISTRIBUTION RULES:
 
                 // visual_state_snapshot only on the last fragment
                 if (i < actualClipCount - 1) {
-                  clonedScene.visual_state_snapshot = null;
+                  clonedScene.visual_state_snapshot = scene.visual_state_snapshot ? {
+                    time_of_day: scene.visual_state_snapshot.time_of_day,
+                    atmosphere: scene.visual_state_snapshot.atmosphere || scene.visual_state_snapshot.weather_or_atmosphere,
+                    weather_or_atmosphere: scene.visual_state_snapshot.atmosphere || scene.visual_state_snapshot.weather_or_atmosphere,
+                    location_state: scene.visual_state_snapshot.location_state
+                  } : null;
                 }
 
                 tempSplitScenes.push(clonedScene);
@@ -965,12 +970,84 @@ IMPORTANT NARRATION DISTRIBUTION RULES:
       injection
     };
 
-    // Cost control: bound total scenes per phase with a sane cap (reuse the MAX_CLIPS pattern)
+    // Deterministic words-per-scene ceiling enforcement (STEP 2)
+    const MAX_WORDS_PER_SCENE = 18;
     const MAX_SCENES_PER_PHASE = 15;
-    if (splitScenes.length > MAX_SCENES_PER_PHASE) {
-      logger.info(`[SceneAgent] Cost control: capping split scenes from ${splitScenes.length} to ${MAX_SCENES_PER_PHASE}`);
-      splitScenes = splitScenes.slice(0, MAX_SCENES_PER_PHASE);
+    const MAX_SCENES_HARD_CEILING = 40;
+    const finalSplitScenes: any[] = [];
+    let bRollFallbackIndex = 0;
+    const shotTypes = ['establishing', 'wide', 'medium', 'close_up', 'extreme_close_up'];
+
+    for (let idx = 0; idx < splitScenes.length; idx++) {
+      const scene = splitScenes[idx];
+      const narrationText = scene.narration_fragment || '';
+      const wordCount = getWordCount(narrationText, narrationLanguage);
+      const currentCount = finalSplitScenes.length;
+
+      if (wordCount > MAX_WORDS_PER_SCENE && currentCount < MAX_SCENES_HARD_CEILING) {
+        let requestedClipCount = Math.ceil(wordCount / MAX_WORDS_PER_SCENE);
+        const remainingCeiling = MAX_SCENES_HARD_CEILING - currentCount;
+        if (requestedClipCount > remainingCeiling) {
+          requestedClipCount = Math.max(1, remainingCeiling);
+        }
+
+        const fragments = splitNarrationIntoFragments(narrationText, requestedClipCount, narrationLanguage);
+        while (fragments.length < requestedClipCount) {
+          fragments.push('');
+        }
+
+        const actualClipCount = fragments.length;
+        if (actualClipCount > 1) {
+          let prevCamera = (scene as any).camera || 'static';
+          let prevShotType = (scene as any).shot_type || 'medium';
+
+          for (let i = 0; i < actualClipCount; i++) {
+            const clonedScene = JSON.parse(JSON.stringify(scene));
+            clonedScene.narration_fragment = fragments[i] ?? '';
+            
+            clonedScene.title = `${scene.title} (Part ${i + 1})`;
+            
+            let cam = prevCamera;
+            if (i > 0) {
+              const cleanPrevCam = prevCamera.replace(/\s*\(Angle\s+[A-Za-z]\)\s*/gi, '').trim();
+              cam = getNextCamera(cleanPrevCam);
+            }
+            clonedScene.camera = cam;
+            prevCamera = cam;
+
+            let st = clonedScene.shot_type || 'medium';
+            if (i > 0 && st === prevShotType) {
+              const idx = shotTypes.indexOf(st);
+              const nextIdx = (idx !== -1 ? idx + 1 : 0) % shotTypes.length;
+              st = shotTypes[nextIdx];
+            }
+            clonedScene.shot_type = st;
+            prevShotType = st;
+
+            if (i > 0) {
+              clonedScene.scene_description = `${scene.scene_description} ${bRollVisuals[bRollFallbackIndex % bRollVisuals.length]}`;
+              bRollFallbackIndex++;
+            }
+
+            if (i < actualClipCount - 1) {
+              clonedScene.visual_state_snapshot = scene.visual_state_snapshot ? {
+                time_of_day: scene.visual_state_snapshot.time_of_day,
+                atmosphere: scene.visual_state_snapshot.atmosphere || scene.visual_state_snapshot.weather_or_atmosphere,
+                weather_or_atmosphere: scene.visual_state_snapshot.atmosphere || scene.visual_state_snapshot.weather_or_atmosphere,
+                location_state: scene.visual_state_snapshot.location_state
+              } : null;
+            }
+
+            finalSplitScenes.push(clonedScene);
+          }
+        } else {
+          finalSplitScenes.push(scene);
+        }
+      } else {
+        finalSplitScenes.push(scene);
+      }
     }
+    splitScenes = finalSplitScenes;
 
     // Renumber sequentially starting from 1
     for (let i = 0; i < splitScenes.length; i++) {

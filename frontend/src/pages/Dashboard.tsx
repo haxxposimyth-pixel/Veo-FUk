@@ -4,7 +4,7 @@ import { useProjectStore } from '../store/project.store';
 import { useSettingsStore } from '../store/settings.store';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { projectCreateSchema, isProfileTypeCoherent } from 'shared';
+import { projectCreateSchema, isProfileTypeCoherent, PROFILE_TYPE_COHERENCE_MATRIX } from 'shared';
 import {
   Film,
   Plus,
@@ -248,12 +248,20 @@ export const Dashboard: React.FC = () => {
         const userProfile = watch('content_profile') || 'viral_story';
         const userType = watch('content_type') || 'auto';
 
+        let resolvedType = generatedBrief.content_type || 'documentary';
+        if (!isProfileTypeCoherent(userProfile, resolvedType)) {
+          const coherentList = PROFILE_TYPE_COHERENCE_MATRIX[userProfile];
+          if (coherentList && coherentList.length > 0) {
+            resolvedType = coherentList[0];
+          }
+        }
+
         if (userProfile === 'auto') {
-          setValue('content_type', generatedBrief.content_type || 'documentary');
+          setValue('content_type', resolvedType);
           setValue('content_profile', generatedBrief.content_profile || 'viral_story');
         } else {
           if (userType === 'auto') {
-            setValue('content_type', generatedBrief.content_type || 'documentary');
+            setValue('content_type', resolvedType);
           }
         }
 

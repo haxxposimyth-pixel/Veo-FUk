@@ -1,5 +1,6 @@
 import { buildCulturalInstruction } from '../config/culture-map';
 import { COPYRIGHT_SAFE_ORIGINALITY } from './originality.constraint';
+import { PROFILE_TYPE_COHERENCE_MATRIX } from 'shared';
 
 export function getConceptResearchPrompt(title: string, language: string, audience: string = ''): string {
   return `Provide a list of concrete, current, and verifiable facts about the literal subject of: "${title}".
@@ -78,15 +79,21 @@ Return ONLY raw JSON — no markdown fences, no prose before or after.`;
 
   let modeInstruction = '';
   if (!contentProfile || contentProfile === 'auto') {
+    const coherenceInfo = Object.entries(PROFILE_TYPE_COHERENCE_MATRIX)
+      .map(([prof, types]) => `  - Profile "${prof}" permits content_type from: ${JSON.stringify(types)}`)
+      .join('\n');
     modeInstruction = `[STRICT CREATIVE CONTRACT - AUTO MODE]:
 - You MUST auto-select both the most appropriate "content_profile" and "content_type" based on the title seed and topic.
 - For "content_profile", select from: 'viral_story', 'documentary', 'tutorial', 'listicle', 'narrative_fiction', 'cinematic_series', 'industry_profile', 'product_showcase', 'episodic_animated_story', 'kids_educational_story', 'historical_deep_dive', 'vlog_day_in_life'.
 - For "content_type", select from: 'documentary', 'narrative', 'presenter', 'montage'.
+- COHERENCE CONSTRAINT: The selected "content_type" MUST be coherent with the selected "content_profile" according to the following mapping:
+${coherenceInfo}
 - In your JSON output, you MUST include the "content_profile" field set to your selected profile key, and "content_type" set to your selected type.`;
   } else if (contentType === 'auto' || !contentType) {
+    const allowedTypes = PROFILE_TYPE_COHERENCE_MATRIX[contentProfile] || ['documentary','narrative','presenter','montage'];
     modeInstruction = `[STRICT CREATIVE CONTRACT - SEMI-AUTO MODE]:
 - The "content_profile" is locked to "${contentProfile}". You MUST set "content_profile": "${contentProfile}" in your JSON output.
-- You MUST auto-select the most appropriate "content_type" from: 'documentary', 'narrative', 'presenter', 'montage'.
+- You MUST auto-select the most appropriate "content_type" from: ${JSON.stringify(allowedTypes)}. Any other type is strictly forbidden.
 - In your JSON output, set the "content_type" field to your selected type.`;
   } else {
     modeInstruction = `[STRICT CREATIVE CONTRACT - MANUAL MODE]:
@@ -313,12 +320,18 @@ Return ONLY raw JSON — no markdown fences, no prose before or after.`;
 
   let modeInstruction = '';
   if (!contentProfile || contentProfile === 'auto') {
+    const coherenceInfo = Object.entries(PROFILE_TYPE_COHERENCE_MATRIX)
+      .map(([prof, types]) => `  - Profile "${prof}" permits content_type from: ${JSON.stringify(types)}`)
+      .join('\n');
     modeInstruction = `- You MUST auto-select both the most appropriate "content_profile" and "content_type" based on the title.
 - For "content_profile", select from: 'viral_story', 'documentary', 'tutorial', 'listicle', 'narrative_fiction', 'cinematic_series', 'industry_profile', 'product_showcase', 'episodic_animated_story', 'kids_educational_story', 'historical_deep_dive', 'vlog_day_in_life'.
-- For "content_type", select from: 'documentary', 'narrative', 'presenter', 'montage'.`;
+- For "content_type", select from: 'documentary', 'narrative', 'presenter', 'montage'.
+- COHERENCE CONSTRAINT: The selected "content_type" MUST be coherent with the selected "content_profile" according to the following mapping:
+${coherenceInfo}`;
   } else if (contentType === 'auto' || !contentType) {
+    const allowedTypes = PROFILE_TYPE_COHERENCE_MATRIX[contentProfile] || ['documentary','narrative','presenter','montage'];
     modeInstruction = `- The "content_profile" is locked to "${contentProfile}". Set "content_profile": "${contentProfile}".
-- You MUST auto-select the most appropriate "content_type" from: 'documentary', 'narrative', 'presenter', 'montage'.`;
+- You MUST auto-select the most appropriate "content_type" from: ${JSON.stringify(allowedTypes)}. Any other type is strictly forbidden.`;
   } else {
     modeInstruction = `- The "content_profile" is locked to "${contentProfile}". Set "content_profile": "${contentProfile}".
 - The "content_type" is locked to "${contentType}". Set "content_type": "${contentType}".`;

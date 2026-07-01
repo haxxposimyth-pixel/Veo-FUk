@@ -24,7 +24,7 @@ export const getSceneSystemPrompt = (
   4. GRAMMATICALLY COMPLETE & CLIP-SIZED FRAGMENTS:
      - A narration_fragment MUST end at a grammatically correct point. For ${narrationLanguage}, this is a ${termDesc}.
      - NEVER end or start a fragment at a comma ',' or in the middle of a clause. A trailing comma is FORBIDDEN.
-     - The ~14-18 word target is a GUIDELINE. It is always better to keep a sentence WHOLE and slightly exceed the word target than to cut a sentence. If one sentence is too long for a clip, keep it intact in a single fragment — the system will subdivide it safely.
+     - The ~12 word target is a STRICT GUIDELINE. Each DISTINCT visual beat must get its own scene; never combine multiple distinct visuals into one scene. You MUST split any narration chunk longer than ~15 words or more than 2 sentences into separate scenes, allocating one distinct visual to each scene. It is always better to keep a sentence WHOLE and slightly exceed the word target than to cut a sentence, but you should structure the scenes to keep the narration fragments short, targeting ~12 words.
      - Preserve the original punctuation of ${narrationLanguage}; do NOT invent punctuation.
 
   5. NATURAL FRAGMENTATION (NO MID-SENTENCE CHOPS):
@@ -149,7 +149,7 @@ General visual storytelling examples:
   4. GRAMMATICALLY COMPLETE & CLIP-SIZED FRAGMENTS:
      - A narration_fragment MUST end at a grammatically correct point. For ${narrationLanguage}, this is a ${termDesc}.
      - NEVER end or start a fragment at a comma ',' or in the middle of a clause. A trailing comma is FORBIDDEN.
-     - The ~14-18 word target is a GUIDELINE. It is always better to keep a sentence WHOLE and slightly exceed the word target than to cut a sentence. If one sentence is too long for a clip, keep it intact in a single fragment — the system will subdivide it safely.
+     - The ~12 word target is a STRICT GUIDELINE. Each DISTINCT visual beat must get its own scene; never combine multiple distinct visuals into one scene. You MUST split any narration chunk longer than ~15 words or more than 2 sentences into separate scenes, allocating one distinct visual to each scene. It is always better to keep a sentence WHOLE and slightly exceed the word target than to cut a sentence, but you should structure the scenes to keep the narration fragments short, targeting ~12 words.
      - Preserve the original punctuation of ${narrationLanguage}; do NOT invent punctuation.
 
   5. NATURAL FRAGMENTATION (NO MID-SENTENCE CHOPS):

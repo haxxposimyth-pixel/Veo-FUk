@@ -296,6 +296,7 @@ export class LLMRouter {
             };
           } catch (err: any) {
             const errorMsg = err instanceof Error ? err.message : String(err);
+            // Fallback happens only after underlying model retries (e.g. exponential backoff on 429) fail
             console.warn(`[LLMRouter] Vertex JSON Model ${step.model} failed: ${errorMsg}`);
             
             if (isVertexFailFastError(err)) {
@@ -684,6 +685,7 @@ export class LLMRouter {
               return { usage: capturedUsage, billing_source: 'vertex' };
             } catch (err: any) {
               const errorMsg = err instanceof Error ? err.message : String(err);
+              // Fallback happens only after underlying model retries (e.g. exponential backoff on 429) fail
               console.warn(`[LLMRouter] Vertex Stream Model ${step.model} failed: ${errorMsg}`);
               
               if (isVertexFailFastError(err)) {

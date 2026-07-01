@@ -627,7 +627,7 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
         const isVertex = settings.vertexEnabled === true;
         let limit = 1;
         if (isVertex) {
-          const vertexConcurrency = (settings as any).vertexConcurrency ?? 10;
+          const vertexConcurrency = (settings as any).vertexConcurrency ?? 4;
           limit = Math.max(1, Math.min(25, vertexConcurrency));
         } else {
           const configuredConcurrency = settings.generationConcurrency ?? 5;
@@ -787,7 +787,7 @@ router.post('/:id/prompts/generate', validateBody(generatePromptSchema), (req: R
             const isVertex = settings.vertexEnabled === true;
             let limit = 1;
             if (isVertex) {
-              const vertexConcurrency = (settings as any).vertexConcurrency ?? 10;
+              const vertexConcurrency = (settings as any).vertexConcurrency ?? 4;
               limit = Math.max(1, Math.min(25, vertexConcurrency));
             } else {
               const configuredConcurrency = settings.generationConcurrency ?? 5;

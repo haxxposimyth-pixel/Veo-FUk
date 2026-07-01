@@ -189,88 +189,110 @@ export class GeminiService {
         let totalTokens = 0;
 
         if (this.useVertexAI) {
-          try {
-            if (!this.vertexClient) {
-              throw new Error('[GeminiService] Vertex AI client not initialized.');
-            }
-            const mappedModelName = this.mapModelNameForVertexAI(modelName);
-            const timeoutMs = config?.timeoutMs ?? 20000;
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => {
-              controller.abort();
-            }, timeoutMs);
-
-            const timeoutPromise = new Promise<never>((_, reject) => {
-              setTimeout(() => {
-                const err = new Error(`Vertex AI request timed out after ${timeoutMs / 1000} seconds`);
-                (err as any).isTimeout = true;
-                reject(err);
-              }, timeoutMs);
-            });
-
-            const requestPromise = (async () => {
-              let vertexRawText = '';
-              let vertexInputTokens = 0;
-              let vertexOutputTokens = 0;
-              let vertexCachedTokens = 0;
-              let vertexThinkingTokens = 0;
-              let vertexTotalTokens = 0;
-
-              const responseStream = await this.vertexClient!.models.generateContentStream({
-                model: mappedModelName,
-                contents: currentPrompt,
-                config: {
-                  temperature: config?.temperature ?? 0.7,
-                  maxOutputTokens: config?.maxOutputTokens ?? 16384,
-                  topP: config?.topP,
-                  topK: config?.topK,
-                  safetySettings: VERTEX_SAFETY_SETTINGS,
-                  abortSignal: controller.signal,
-                  thinkingConfig: mappedModelName.includes('pro') ? { thinkingBudget: 256 } : { thinkingBudget: 0 },
-                }
-              });
-
-              for await (const chunk of responseStream) {
-                const text = chunk.text;
-                if (text) {
-                  vertexRawText += text;
-                  onChunk?.(text);
-                }
-                if (chunk.usageMetadata) {
-                  vertexInputTokens = chunk.usageMetadata.promptTokenCount ?? 0;
-                  vertexOutputTokens = chunk.usageMetadata.candidatesTokenCount ?? 0;
-                  vertexCachedTokens = (chunk.usageMetadata as any).cachedContentTokenCount ?? 0;
-                  vertexThinkingTokens = (chunk.usageMetadata as any).thoughtsTokenCount ?? 0;
-                  vertexTotalTokens = chunk.usageMetadata.totalTokenCount ?? 0;
-                }
-              }
-
-              return {
-                rawText: vertexRawText,
-                inputTokens: vertexInputTokens,
-                outputTokens: vertexOutputTokens,
-                cachedTokens: vertexCachedTokens,
-                thinkingTokens: vertexThinkingTokens,
-                totalTokens: vertexTotalTokens,
-              };
-            })();
-
-            const result = await Promise.race([
-              requestPromise,
-              timeoutPromise
-            ]);
-            clearTimeout(timeoutId);
-
-            rawText = result.rawText;
-            inputTokens = result.inputTokens;
-            outputTokens = result.outputTokens;
-            cachedTokens = result.cachedTokens;
-            thinkingTokens = result.thinkingTokens;
-            totalTokens = result.totalTokens;
-          } catch (vertexError) {
-            throw this.classifyAndWrapVertexError(vertexError, modelName);
+          if (!this.vertexClient) {
+            throw new Error('[GeminiService] Vertex AI client not initialized.');
           }
+          const mappedModelName = this.mapModelNameForVertexAI(modelName);
+          const timeoutMs = config?.timeoutMs ?? 20000;
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+          }, timeoutMs);
+
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => {
+              const err = new Error(`Vertex AI request timed out after ${timeoutMs / 1000} seconds`);
+              (err as any).isTimeout = true;
+              reject(err);
+            }, timeoutMs);
+          });
+
+          let attemptNum = 1;
+          const maxVertexAttempts = 3;
+          let baseDelay = 200;
+          let result: any = null;
+
+          while (attemptNum <= maxVertexAttempts) {
+            try {
+              const requestPromise = (async () => {
+                let vertexRawText = '';
+                let vertexInputTokens = 0;
+                let vertexOutputTokens = 0;
+                let vertexCachedTokens = 0;
+                let vertexThinkingTokens = 0;
+                let vertexTotalTokens = 0;
+
+                const responseStream = await this.vertexClient!.models.generateContentStream({
+                  model: mappedModelName,
+                  contents: currentPrompt,
+                  config: {
+                    temperature: config?.temperature ?? 0.7,
+                    maxOutputTokens: config?.maxOutputTokens ?? 16384,
+                    topP: config?.topP,
+                    topK: config?.topK,
+                    safetySettings: VERTEX_SAFETY_SETTINGS,
+                    abortSignal: controller.signal,
+                    thinkingConfig: mappedModelName.includes('pro') ? { thinkingBudget: 256 } : { thinkingBudget: 0 },
+                  }
+                });
+
+                for await (const chunk of responseStream) {
+                  const text = chunk.text;
+                  if (text) {
+                    vertexRawText += text;
+                    onChunk?.(text);
+                  }
+                  if (chunk.usageMetadata) {
+                    vertexInputTokens = chunk.usageMetadata.promptTokenCount ?? 0;
+                    vertexOutputTokens = chunk.usageMetadata.candidatesTokenCount ?? 0;
+                    vertexCachedTokens = (chunk.usageMetadata as any).cachedContentTokenCount ?? 0;
+                    vertexThinkingTokens = (chunk.usageMetadata as any).thoughtsTokenCount ?? 0;
+                    vertexTotalTokens = chunk.usageMetadata.totalTokenCount ?? 0;
+                  }
+                }
+
+                return {
+                  rawText: vertexRawText,
+                  inputTokens: vertexInputTokens,
+                  outputTokens: vertexOutputTokens,
+                  cachedTokens: vertexCachedTokens,
+                  thinkingTokens: vertexThinkingTokens,
+                  totalTokens: vertexTotalTokens,
+                };
+              })();
+
+              result = await Promise.race([
+                requestPromise,
+                timeoutPromise
+              ]);
+              break; // success
+            } catch (err: any) {
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              const isRateLimit = errorMsg.includes('429') || 
+                                  errorMsg.includes('RESOURCE_EXHAUSTED') || 
+                                  errorMsg.toLowerCase().includes('quota') || 
+                                  errorMsg.toLowerCase().includes('rate limit');
+              
+              if (isRateLimit && attemptNum < maxVertexAttempts) {
+                const delay = baseDelay * Math.pow(2, attemptNum - 1) + Math.random() * 200;
+                console.warn(`[GeminiService] Vertex 429/Rate Limit on model ${modelName} — retrying attempt ${attemptNum}/${maxVertexAttempts} in ${Math.round(delay)}ms. Error: ${errorMsg}`);
+                await new Promise(r => setTimeout(r, delay));
+                attemptNum++;
+              } else {
+                clearTimeout(timeoutId);
+                throw this.classifyAndWrapVertexError(err, modelName);
+              }
+            }
+          }
+          clearTimeout(timeoutId);
+
+          rawText = result.rawText;
+          inputTokens = result.inputTokens;
+          outputTokens = result.outputTokens;
+          cachedTokens = result.cachedTokens;
+          thinkingTokens = result.thinkingTokens;
+          totalTokens = result.totalTokens;
         } else {
           const streamResult = await this._callWithBackoff(() =>
             model.generateContentStream({
@@ -426,27 +448,48 @@ Return ONLY valid JSON matching the schema. No markdown fences. No explanation.`
       let completed = false;
 
       const runStream = async () => {
-        try {
-          let full = '';
-          for await (const chunk of this.generateStreamViaVertexAI(
-            modelName,
-            prompt,
-            undefined,
-            config,
-            controller.signal,
-            onUsage
-          )) {
-            full += chunk;
-            onChunk(chunk);
+        let attempt = 1;
+        const maxAttempts = 3;
+        let baseDelay = 200;
+        
+        while (attempt <= maxAttempts) {
+          try {
+            let full = '';
+            for await (const chunk of this.generateStreamViaVertexAI(
+              modelName,
+              prompt,
+              undefined,
+              config,
+              controller.signal,
+              onUsage
+            )) {
+              full += chunk;
+              onChunk(chunk);
+            }
+            completed = true;
+            onComplete(full);
+            clearTimeout(timeoutId);
+            return;
+          } catch (vertexError: any) {
+            const errorMsg = vertexError instanceof Error ? vertexError.message : String(vertexError);
+            const isRateLimit = errorMsg.includes('429') || 
+                                errorMsg.includes('RESOURCE_EXHAUSTED') || 
+                                errorMsg.toLowerCase().includes('quota') || 
+                                errorMsg.toLowerCase().includes('rate limit');
+            
+            if (isRateLimit && attempt < maxAttempts) {
+              const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 200;
+              console.warn(`[GeminiService] Vertex Stream 429/Rate Limit on model ${modelName} — retrying attempt ${attempt}/${maxAttempts} in ${Math.round(delay)}ms. Error: ${errorMsg}`);
+              await new Promise(r => setTimeout(r, delay));
+              attempt++;
+            } else {
+              completed = true;
+              clearTimeout(timeoutId);
+              const classified = this.classifyAndWrapVertexError(vertexError, modelName);
+              onError(classified);
+              return;
+            }
           }
-          completed = true;
-          onComplete(full);
-        } catch (vertexError) {
-          completed = true;
-          const classified = this.classifyAndWrapVertexError(vertexError, modelName);
-          onError(classified);
-        } finally {
-          clearTimeout(timeoutId);
         }
       };
 

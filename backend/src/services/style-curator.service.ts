@@ -28,7 +28,8 @@ export class StyleCuratorService extends BaseAgent {
     brief: any,
     language: string = 'English',
     apiKey?: string,
-    opts?: { profileDefaultKey?: string }
+    opts?: { profileDefaultKey?: string },
+    forceNewStyle: boolean = false
   ): Promise<StyleCuratorResult> {
     const resolvedModel = AGENT_MODEL_MAPPING['ConceptAgent'] || 'gemini-2.5-pro';
     const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
@@ -62,26 +63,76 @@ Describe a visual style with focus on motion video, rich shot-to-shot consistenc
       }
     }
 
-    const selectionPrompt = getStyleSelectionPrompt(
-      brief,
-      brief.content_type || 'documentary',
-      language,
-      candidates,
-      resolvedProfileDefaultKey
-    );
+    let sel: ConceptStyleSelection;
+    if (forceNewStyle) {
+      const createPrompt = `You are a senior cinematographer and AI video art director for Google Veo 3.1.
+Your task is to design a brand-new visual style tailored to the following project:
 
-    const sel = await this.generateStructured<ConceptStyleSelection>(
-      null,
-      activeApiKey,
-      resolvedModel,
-      {
-        prompt: selectionPrompt,
-        systemInstruction: systemPrompt,
-        schema: conceptStyleSelectionSchema,
-        temperature: 0.7,
-        maxOutputTokens: 1500,
-      }
-    );
+PROJECT DETAILS:
+- Title: ${brief.project_title || brief.titles?.[0]?.text || ''}
+- Subject/Topic/Goal: ${brief.project_topic}
+- Content Type: ${brief.content_type || 'documentary'}
+- Core Curiosity: ${brief.engagement_blueprint?.core_curiosity_question || ''}
+- Emotional Driver: ${brief.engagement_blueprint?.emotional_driver || ''}
+- Narration Language: ${language}
+
+Your JSON response must use mode: "new" and populate the "name", "description", "render_family", and "veo_style_tokens" fields. Do not try to match any existing styles.
+
+You MUST specify the most appropriate "render_family" from this enum:
+[
+  "photoreal_cinematic",
+  "documentary_realism",
+  "stylized_3d",
+  "pixar_3d",
+  "claymation_stopmotion",
+  "anime_2d",
+  "painterly_watercolor",
+  "comic_graphic_novel",
+  "flat_2d_vector",
+  "motion_graphics",
+  "pixel_art"
+]
+
+Guidelines for the style description (120 to 300 words):
+- Explicitly detail: (1) Render style: e.g. photorealistic live-action cinematic / 2D vector animation. (2) Color palette (3 to 5 concrete hex or color names) + color mood. (3) Lighting style (source, direction, temperature in Kelvin, quality). (4) Camera movement style. (5) Lens family + film stock grade/grain. (6) Comma-separated veo_style_tokens. (7) Forbidden elements.
+- Keep the style consistent shot-to-shot. Describe motion video, not static images. Do not mention copyrighted franchises.
+- HARD RULE: The description MUST be completely SUBJECT-AGNOSTIC. Detail aesthetic, color, camera, lens, and technique parameters only. Do NOT include any subject-specific nouns, locations, characters, vehicles, or objects (e.g. do not reference 'ship', 'ocean', 'plane', 'factory', 'engine', 'cockpit', etc.) so that the style description can be safely reused for other subjects without leaking.`;
+
+      sel = await this.generateStructured<ConceptStyleSelection>(
+        null,
+        activeApiKey,
+        resolvedModel,
+        {
+          prompt: createPrompt,
+          systemInstruction: systemPrompt,
+          schema: conceptStyleSelectionSchema,
+          temperature: 0.7,
+          maxOutputTokens: 1500,
+        }
+      );
+      sel.mode = 'new';
+    } else {
+      const selectionPrompt = getStyleSelectionPrompt(
+        brief,
+        brief.content_type || 'documentary',
+        language,
+        candidates,
+        resolvedProfileDefaultKey
+      );
+
+      sel = await this.generateStructured<ConceptStyleSelection>(
+        null,
+        activeApiKey,
+        resolvedModel,
+        {
+          prompt: selectionPrompt,
+          systemInstruction: systemPrompt,
+          schema: conceptStyleSelectionSchema,
+          temperature: 0.7,
+          maxOutputTokens: 1500,
+        }
+      );
+    }
 
     const warnings: string[] = [];
 
@@ -163,42 +214,56 @@ Your JSON response must use mode: "new" and populate the "name", "description", 
     }
 
     // 4. Create new style
-    const newName = sel.name || 'Untitled Style';
     const newDesc = sel.description || '';
     const renderFamily = this.classifyRenderFamily(sel.render_family || '', newDesc);
+    let finalName = (sel.name || 'Untitled Style').trim();
 
-    // Run Deduplication
-    const dedupeMatch = this.dedupe(newName, newDesc, renderFamily, customCandidates, LOCKED_CORE);
-    if (dedupeMatch) {
-      // Run compatibility check on dedupeMatch description!
-      const dedupeCompatibility = await this.checkStyleCompatibility(
-        brief,
-        dedupeMatch.description,
-        activeApiKey,
-        resolvedModel
-      );
+    if (forceNewStyle) {
+      const nameExists = (n: string) => 
+        customCandidates.some(c => c.name.toLowerCase().trim() === n.toLowerCase().trim()) ||
+        LOCKED_CORE.some(c => c.name.toLowerCase().trim() === n.toLowerCase().trim());
+      
+      let counter = 1;
+      let checkName = finalName;
+      while (nameExists(checkName)) {
+        checkName = `${finalName} (${counter})`;
+        counter++;
+      }
+      finalName = checkName;
+    } else {
+      // Run Deduplication
+      const dedupeMatch = this.dedupe(finalName, newDesc, renderFamily, customCandidates, LOCKED_CORE);
+      if (dedupeMatch) {
+        // Run compatibility check on dedupeMatch description!
+        const dedupeCompatibility = await this.checkStyleCompatibility(
+          brief,
+          dedupeMatch.description,
+          activeApiKey,
+          resolvedModel
+        );
 
-      if (dedupeCompatibility.compatible) {
-        const comfort = VEO_COMFORT[dedupeMatch.render_family];
-        if (comfort !== 'comfortable') {
-          warnings.push(COMFORT_WARNING(dedupeMatch.render_family));
+        if (dedupeCompatibility.compatible) {
+          const comfort = VEO_COMFORT[dedupeMatch.render_family];
+          if (comfort !== 'comfortable') {
+            warnings.push(COMFORT_WARNING(dedupeMatch.render_family));
+          }
+          return {
+            visual_style: dedupeMatch.description,
+            style_name: dedupeMatch.name,
+            style_id: dedupeMatch.isPreset ? '' : dedupeMatch.id,
+            render_family: dedupeMatch.render_family,
+            comfort,
+            origin: 'matched',
+            warnings
+          };
+        } else {
+          console.warn(`[StyleCuratorService] Rejected dedupe matched style "${dedupeMatch.name}" (ID: ${dedupeMatch.id}) for incompatibility. Reason: ${dedupeCompatibility.reason}`);
         }
-        return {
-          visual_style: dedupeMatch.description,
-          style_name: dedupeMatch.name,
-          style_id: dedupeMatch.isPreset ? '' : dedupeMatch.id,
-          render_family: dedupeMatch.render_family,
-          comfort,
-          origin: 'matched',
-          warnings
-        };
-      } else {
-        console.warn(`[StyleCuratorService] Rejected dedupe matched style "${dedupeMatch.name}" (ID: ${dedupeMatch.id}) for incompatibility. Reason: ${dedupeCompatibility.reason}`);
       }
     }
 
     // Create custom style
-    const created = CustomStyleRepository.create(newName.trim(), newDesc.trim(), renderFamily);
+    const created = CustomStyleRepository.create(finalName, newDesc.trim(), renderFamily);
     const comfort = VEO_COMFORT[renderFamily];
     if (comfort !== 'comfortable') {
       warnings.push(COMFORT_WARNING(renderFamily));
@@ -247,10 +312,35 @@ Your JSON response must use mode: "new" and populate the "name", "description", 
       }
     }
 
-    // 2. LLM-based verification
+    // 2. Setting-conflict gate
+    const SETTING_GROUPS: Record<string, string[]> = {
+      urban: ['urban', 'city', 'street', 'streetlight', 'storefront', 'downtown', 'metropolitan', 'skyscraper'],
+      wilderness: ['mountain', 'himalay', 'snow', 'glacier', 'altitude', 'wilderness', 'forest', 'desert', 'valley', 'mountain pass', 'cliff', 'remote', 'rural']
+    };
+
+    const styleSettingGroups = Object.keys(SETTING_GROUPS).filter(group =>
+      SETTING_GROUPS[group].some(word => styleLower.includes(word))
+    );
+
+    const topicSettingGroups = Object.keys(SETTING_GROUPS).filter(group =>
+      SETTING_GROUPS[group].some(word => briefLower.includes(word))
+    );
+
+    if (styleSettingGroups.length > 0 && topicSettingGroups.length > 0) {
+      const hasOverlap = styleSettingGroups.some(g => topicSettingGroups.includes(g));
+      if (!hasOverlap) {
+        return {
+          compatible: false,
+          reason: `Setting conflict: visual style indicates environment(s) [${styleSettingGroups.join(', ')}] which conflict with the project topic's environment(s) [${topicSettingGroups.join(', ')}].`,
+        };
+      }
+    }
+
+    // 3. LLM-based verification
     const systemPrompt = `You are a database integrity validator for an AI video production pipeline.
 Your task is to analyze whether an existing visual style description is compatible with a new video project topic.
 A visual style is INCOMPATIBLE if its description contains specific, locked subject-matter or environment-specific nouns (e.g. 'ocean', 'ship', 'ballast tanks', 'container cargo', 'aircraft', 'cockpit') that contradict or are foreign to the new project topic.
+CRITICAL setting rule: treat environment/setting-specific nouns in the style description (e.g. 'streetlights', 'storefronts', 'urban concrete', 'downtown') as HARD incompatibilities when the project topic is set in a different environment (wilderness, mountains, high-altitude, rural, marine, desert, etc.). Do NOT rationalize such nouns as mere 'lighting examples.' When setting alignment is uncertain, return COMPATIBLE = false (incompatible) so a fresh style is generated.
 A visual style is COMPATIBLE if it is subject-agnostic (describing only camera, lens, lighting, color mood, and artistic technique) or if its specific subjects align perfectly with the new topic.
 Output JSON only.`;
 

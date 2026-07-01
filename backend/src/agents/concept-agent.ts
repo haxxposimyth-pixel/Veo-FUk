@@ -27,6 +27,7 @@ export class ConceptAgent extends BaseAgent {
     contentProfile?: string,
     contentType?: string,
     region: string = 'auto',
+    forceNewStyle: boolean = false,
   ): Promise<ConceptBrief> {
     const resolvedModel = AGENT_MODEL_MAPPING['ConceptAgent'] || 'gemini-2.5-pro';
     const activeApiKey = apiKey || SettingsRepository.getSettings().apiKey || '';
@@ -96,6 +97,10 @@ export class ConceptAgent extends BaseAgent {
 
     if (brief && typeof brief.project_topic === 'string') {
       brief.project_topic = cleanTopicScaffolding(brief.project_topic);
+    }
+    if (brief) {
+      (brief as any).project_title = title;
+      (brief as any).forceNewStyle = forceNewStyle;
     }
     return brief;
   }

@@ -36,7 +36,8 @@ router.post('/concept/generate', async (req: Request, res: Response) => {
       undefined,
       content_profile,
       content_type,
-      region || 'auto'
+      region || 'auto',
+      true // forceNewStyle
     );
     
     const profile = resolveContentProfile(content_profile || 'viral_story');
@@ -46,7 +47,8 @@ router.post('/concept/generate', async (req: Request, res: Response) => {
       brief,
       language || 'English',
       settings.apiKey,
-      resolvedDefaultKey ? { profileDefaultKey: resolvedDefaultKey } : undefined
+      resolvedDefaultKey ? { profileDefaultKey: resolvedDefaultKey } : undefined,
+      true // forceNewStyle
     );
     
     res.json({

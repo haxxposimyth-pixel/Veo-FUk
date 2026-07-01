@@ -675,7 +675,7 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
         batches.push(batch);
       }
 
-      // We'll execute batches in parallel with limit = 3
+      // We'll execute batches in parallel with limit = 3 (Wave 1.5b Performance Fix)
       const limit = pLimit(3);
       const batchResults = await Promise.all(
         batches.map((batchNums) =>
@@ -766,7 +766,7 @@ Reply ONLY with a JSON object containing the resolved keys (do not wrap in markd
     const stageBStart = Date.now();
 
     const bibleContextBlock = buildBibleContext(bible);
-    const limit = pLimit(4);
+    const limit = pLimit(3);
 
     // Precompute all phase summaries for deduplication reference in expansions
     const allPhaseSummaries = spine.phases

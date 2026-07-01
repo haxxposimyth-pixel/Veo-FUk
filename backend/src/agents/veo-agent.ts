@@ -919,14 +919,10 @@ The previous scene in this location used ${prevKelvin}K lighting. Your lighting 
                 }
                 data = generated;
               } else if (visualWords.length > 80) {
-                console.warn(`[VeoAgent] Visual exceeded 80 words (${visualWords.length} words) on attempt ${retryCount + 1}.`);
-                if (retryCount === 0) {
-                  visualNeedsRetry = true;
-                  retryPromptInstruction = `[RETRY INSTRUCTION - CONDENSE REWRITE]: The previous visual description was too long (${visualWords.length} words). You must rewrite it to be strictly under 80 words (target ~65 words). Keep the single dominant subject and action, and preserve the concrete physical details. You must DROP any secondary/listy elements, multiple simultaneous activities, and meta-phrasing about realism or aesthetics (e.g. do not say "rendered with realistic textures" or "documentary aesthetic"). Every word must count and describe a visible physical detail. Ends with a period.`;
-                } else {
-                  visualNeedsRetry = false;
-                }
+                console.warn(`[VeoAgent] Visual exceeded 80 words (${visualWords.length} words) on attempt ${retryCount + 1}. Skipping LLM retry; postProcess deterministic trim will handle.`);
+                visualNeedsRetry = false;
                 data = generated;
+                break;
               } else {
                 visualNeedsRetry = false;
                 data = generated;
@@ -2132,7 +2128,7 @@ INSTRUCTIONS:
     let appearanceViolationDetected = false;
     let appearanceCorrectedDetected = false;
 
-    if (!data.skip_appearance_validation && enableValidators) {
+    if (false) { // Disabled AppearanceValidator invocation to speed up generation (no-op)
       const validationResult = await this.validatePromptFields(
         projectId,
         data,
